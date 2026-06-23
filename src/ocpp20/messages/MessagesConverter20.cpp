@@ -148,7 +148,6 @@ MessagesConverter20::MessagesConverter20()
     REGISTER_CONVERTER(Authorize);
     REGISTER_CONVERTER(ClearedChargingLimit);
     REGISTER_CONVERTER(CostUpdated);
-    REGISTER_CONVERTER(DataTransfer);
     REGISTER_CONVERTER(FirmwareStatusNotification);
     REGISTER_CONVERTER(Heartbeat);
     REGISTER_CONVERTER(LogStatusNotification);
