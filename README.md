@@ -4,6 +4,7 @@
 This implementation targets only the Websocket/JSON version of these protocols.
 
 This implementation is based on the following libraries :
+
 * [OpenSSL](https://www.openssl.org) : TLS communications + certificates management
 * [libwebsockets](https://libwebsockets.org) : Websocket layer
 * [SQLite](https://www.sqlite.org/) : Database / persistency
@@ -85,6 +86,7 @@ The build is based on CMake, the following definitions must be passed to the CMa
 Additionnaly, the **CMakeLists_Options.txt** contains several options that can be switched on/off.
 
 The build generates 2 flavors of the **Open OCPP** library depending on the needs of your project :
+
 * Shared : libopen-ocpp.so
 * Static : libopen-ocpp_static.a
 
@@ -122,6 +124,7 @@ Example for a 64-bit OpenSSL package download from the mentioned website and ins
 **Note** : Do not forget to close and re-open Visual Studio after having modified the environment variables to have them taken into account
 
 ## Install and use
+
 ### Installation
 
 **Open OCPP** generated libraries and their includes can be installed in the standard system directories using the CMake command :
@@ -192,3 +195,45 @@ Follow the "fork-and-pull" Git workflow :
 * Submit a Pull request so that we can review your changes
 
 **Be sure to merge the latest from "upstream" before making a pull request!**
+
+### Local Debug
+```
+	cmake -S . -B build_native -G Ninja
+	ninja -C build_native/
+	ninja -C build_native/ install
+	cd examples/ocpp20/local_test/
+	cmake -S . -B build -G Ninja
+	ninja -C build
+	cd build/
+	./local_test
+```
+
+output:
+
+
+  ```
+  Starting charge point with :
+   - id_tag = 0123456789ABCD
+   - working_dir =
+  [ INFO  ] - [2026-06-23T08:24:12] - ChargePoint20.cpp:236 - Starting OCPP stack v2.0.0 - Central System : ws://192.168.31.60:8081/ - Charge Point identifier : cp001
+  [2026/06/23 08:24:13:0283] N: lws_create_context: LWS: 4.3.3-v2.0.0-alpha-35-gb665254, NET CLI SRV H1 H2 WS ConMon ASYNC_DNS IPv6-absent
+  [2026/06/23 08:24:13:0284] N: __lws_lc_tag:  ++ [wsi|0|pipe] (1)
+  [2026/06/23 08:24:13:0293] N: __lws_lc_tag:  ++ [vh|0|system||-1] (1)
+  [2026/06/23 08:24:13:0294] N: __lws_lc_tag:  ++ [wsisrv|0|adopted] (1)
+  [2026/06/23 08:24:13:0295] N: __lws_lc_tag:  ++ [vh|1|default||-1] (2)
+  Waiting connection to Central System...
+  [2026/06/23 08:24:13:0942] N: __lws_lc_tag:  ++ [wsicli|0|WS/h1/default/192.168.31.60] (1)
+  [ INFO  ] - [2026-06-23T08:24:13] - ChargePoint20.cpp:433 - Connected to Central System
+  Connection state changed : 1
+  Connected to Central System!
+  Sending BootNotification request...
+  [  COM  ] - [2026-06-23T08:24:13] - ChargePoint20.cpp:492 - TX : [2, "423716694", "BootNotification", {"chargingStation":{"model":"Open OCPP CP","vendorName":"Open OCPP","firmwareVersion":"0.1"},"reason":"PowerUp"}]
+  [  COM  ] - [2026-06-23T08:24:13] - ChargePoint20.cpp:486 - RX : [3,"423716694",{"currentTime":"2026-06-23T08:24:13.238Z","status":"Accepted","interval":60}]
+  Checking for id tag 0123456789ABCD authorization...
+  [  COM  ] - [2026-06-23T08:24:13] - ChargePoint20.cpp:492 - TX : [2, "423716695", "Authorize", {"idToken":{"idToken":"0123456789ABCD","type":"ISO14443"}}]
+  [  COM  ] - [2026-06-23T08:24:13] - ChargePoint20.cpp:486 - RX : [3,"423716695",{"idTokenInfo":{"status":"Accepted"}}]
+  Id tag authorized
+  [  COM  ] - [2026-06-23T08:24:13] - ChargePoint20.cpp:492 - TX : [2, "423716696", "StatusNotification", {"timestamp":"2026-06-23T08:24:13Z","connectorStatus":"Occupied","evseId":1,"connectorId":1}]
+  [  COM  ] - [2026-06-23T08:24:13] - ChargePoint20.cpp:486 - RX : [3,"423716696",{}]
+  ......
+  ```
