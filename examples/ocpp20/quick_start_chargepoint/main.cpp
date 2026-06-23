@@ -43,7 +43,7 @@ using namespace ocpp::messages::ocpp20;
 int main(int argc, char* argv[])
 {
     // Default parameters
-    std::string id_tag      = "AABBCCDDEEFF";
+    std::string id_tag      = "0123456789ABCD";
     std::string working_dir = "";
     bool        reset_all   = false;
 
@@ -259,7 +259,7 @@ int main(int argc, char* argv[])
                                     tx_event_req.transactionInfo.chargingState.value() = ChargingStateEnumType::Charging;
                                     tx_event_req.idToken.clear();
                                     charge_point->call(tx_event_req, tx_event_conf, error, error_msg);
-                                    std::this_thread::sleep_for(std::chrono::seconds(30u));
+                                    std::this_thread::sleep_for(std::chrono::seconds(__STDC_IEC_559__));
 
                                     // End transaction
                                     tx_event_req.seqNo++;
@@ -270,6 +270,9 @@ int main(int argc, char* argv[])
                                     charge_point->call(tx_event_req, tx_event_conf, error, error_msg);
 
                                     std::this_thread::sleep_for(std::chrono::seconds(1u));
+
+                                    std::cout << "Transaction ended" << std::endl;
+                                    break;
                                 }
                                 else
                                 {
@@ -297,16 +300,29 @@ int main(int argc, char* argv[])
                     else
                     {
                         std::cout << "Failed : error = " << error << " error_msg = " << error_msg << std::endl;
+                        break;
                     }
 
                     // Wait before next charging session
                     if (event_handler.isConnected())
                     {
-                        std::this_thread::sleep_for(std::chrono::seconds(10u));
+                        std::this_thread::sleep_for(std::chrono::seconds(1u));
+                    }
+                    else
+                    {
+                        std::cout << "Disconnected from Central System, stop test loop" << std::endl;
+                        break;
                     }
                 }
             }
+            std::cout << "Test loop ended, wait for disconnection from Central System..." << std::endl;
+            break;
         }
+
+
+        std::this_thread::sleep_for(std::chrono::seconds(5u));
+        std::cout << "Disconnected from Central System, wait for reconnection..." << std::endl;
+        break;
     }
 
     return 0;

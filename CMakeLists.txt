@@ -8,6 +8,15 @@ project(OpenOCPP DESCRIPTION "Open Source C++ implementation of the OCPP 1.6 and
                  VERSION 2.0.0
 )
 
+# 设置构建类型为调试模式
+set(CMAKE_BUILD_TYPE Debug)
+
+# 添加编译选项，启用调试信息
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
+
+# 添加链接选项，包含调试信息
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -g")
+
 # Definitions for Version.h file
 add_definitions(-DLIBOPENOCPP_MAJOR="${PROJECT_VERSION_MAJOR}")
 add_definitions(-DLIBOPENOCPP_MINOR="${PROJECT_VERSION_MINOR}")
@@ -49,9 +58,11 @@ endif()
 
 
 # Default output directories
-if(NOT DEFINED BIN_DIR)
-    set(BIN_DIR ${CMAKE_SOURCE_DIR}/bin/${TARGET})
-endif()
+# if(NOT DEFINED BIN_DIR)
+#     set(BIN_DIR ${CMAKE_SOURCE_DIR}/bin/${TARGET})
+# endif()
+
+set(BIN_DIR ${CMAKE_SOURCE_DIR}/output/examples)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${BIN_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${BIN_DIR})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BIN_DIR})
@@ -130,6 +141,18 @@ endif()
 
 # Install commands
 include(GNUInstallDirs)
+
+set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR}/output/usr)
+set(CMAKE_INSTALL_BINDIR ${CMAKE_SOURCE_DIR}/output/bin)
+set(CMAKE_INSTALL_LIBDIR ${CMAKE_SOURCE_DIR}/output/lib)
+set(CMAKE_INSTALL_INCLUDEDIR ${CMAKE_SOURCE_DIR}/output/include)
+
+message(CMAKE_INSTALL_BINDIR: ${CMAKE_INSTALL_BINDIR})
+
+set(prefix ${CMAKE_SOURCE_DIR}/output)
+message(prefix:${prefix})
+
+message(${CMAKE_SOURCE_DIR}/output)
 
 file(GLOB_RECURSE PUBLIC_HEADERS
      LIST_DIRECTORIES false RELATIVE ${CMAKE_SOURCE_DIR} "${CMAKE_SOURCE_DIR}/src/*.h")

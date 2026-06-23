@@ -544,7 +544,8 @@ bail:
 
 	lws_free_set_NULL(wsi->stash);
 	lws_fi_destroy(&wsi->fic);
-	lws_free(wsi);
+	// resolved for double free error, modified by WangLibo 2025-04-02
+	// lws_free(wsi);
 #if defined(LWS_ROLE_H1) || defined(LWS_ROLE_H2)
 bail2:
 #endif

@@ -18,7 +18,7 @@ endif()
 option(BUILD_SHARED_LIBRARY         "Build Open OCPP as a shared library"                                   ON)
 
 # Static library
-option(BUILD_STATIC_LIBRARY         "Build Open OCPP as a static library"                                   ON)
+option(BUILD_STATIC_LIBRARY         "Build Open OCPP as a static library"                                   OFF)
 
 # Unit tests
 option(BUILD_UNIT_TESTS             "Build unit tests"                                                      ON)
