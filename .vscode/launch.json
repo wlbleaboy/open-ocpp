@@ -2,13 +2,13 @@
     "version": "0.2.0",
     "configurations": [
          {
-            "name": "remote_chargepoint_test",
+            "name": "local test debug",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceRoot}/bin/gcc/quick_start_chargepoint20",
+            "program": "${workspaceRoot}/examples/ocpp20/local_test/build/local_test",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceRoot}/bin/gcc",
+            "cwd": "${workspaceRoot}/examples/ocpp20/local_test/build",
             "environment": [{"name":"MALLOC_CHECK_", "value":"2"}],
             "externalConsole": false,
             "MIMode": "gdb",
