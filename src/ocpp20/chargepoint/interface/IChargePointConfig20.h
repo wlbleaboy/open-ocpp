@@ -100,6 +100,9 @@ class IChargePointConfig20
     /** @brief Maximum number of entries in the log (0 = no logs in database) */
     virtual unsigned int logMaxEntriesCount() const = 0;
 
+    /** @brief Transaction updated sampled meter values interval, in seconds (0 = disabled) */
+    virtual std::chrono::seconds txUpdatedInterval() const { return std::chrono::seconds(0); }
+
     // Security
 
     /** @brief Security profile to use for connection with the central system [0-3] */

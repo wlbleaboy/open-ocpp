@@ -22,16 +22,20 @@ along with OpenOCPP. If not, see <http://www.gnu.org/licenses/>.
 #include "GenericMessageSender.h"
 #include "Heartbeat20.h"
 #include "IBasicChargePointEventsHandler20.h"
+#include "IChargePointEventsHandler20.h"
 #include "IChargePointConfig20.h"
 #include "IDeviceModel20.h"
 #include "IInternalConfigManager.h"
 #include "InternalConfigKeys.h"
+#include "IRpc.h"
 #include "Logger.h"
 #include "StatusNotification20.h"
 #include "WorkerThreadPool.h"
 
 #include <functional>
 #include <thread>
+#include <utility>
+#include <vector>
 
 using namespace ocpp::messages;
 using namespace ocpp::messages::ocpp20;
@@ -56,12 +60,16 @@ StatusManager::StatusManager(const ocpp::config::IChargePointConfig20& stack_con
                              ocpp::helpers::ITimerPool&                timer_pool,
                              ocpp::helpers::WorkerThreadPool&          worker_pool,
                              Connectors&                               connectors,
+                             ocpp::messages::IMessageDispatcher&       msg_dispatcher,
+                             const ocpp::messages::GenericMessagesConverter& messages_converter,
                              ocpp::messages::GenericMessageSender&     msg_sender,
                              ITriggerMessageManager&                   trigger_manager,
                              ocpp::types::ocpp20::BootReasonEnumType   boot_reason)
-    : m_stack_config(stack_config),
+    : GenericMessageHandler<ChangeAvailabilityReq, ChangeAvailabilityConf>(CHANGEAVAILABILITY_ACTION, messages_converter),
+      m_stack_config(stack_config),
       m_device_model(device_model),
-      m_events_handler(events_handler),
+      m_basic_events_handler(&events_handler),
+      m_events_handler(nullptr),
       m_internal_config(internal_config),
       m_worker_pool(worker_pool),
       m_connectors(connectors),
@@ -76,12 +84,69 @@ StatusManager::StatusManager(const ocpp::config::IChargePointConfig20& stack_con
       m_next_heartbeat_timestamp(std::chrono::steady_clock::now() + MANDATORY_HEARTBEAT_PERIOD),
       m_last_disconnect_timestamp()
 {
-    trigger_manager.registerHandler(MessageTriggerEnumType::BootNotification, *this);
-    trigger_manager.registerHandler(MessageTriggerEnumType::StatusNotification, *this);
-    trigger_manager.registerHandler(MessageTriggerEnumType::Heartbeat, *this);
-
     m_boot_notification_timer.setCallback([this] { m_worker_pool.run<void>(std::bind(&StatusManager::bootNotificationProcess, this)); });
     m_heartbeat_timer.setCallback([this] { m_worker_pool.run<void>(std::bind(&StatusManager::heartBeatProcess, this)); });
+
+    trigger_manager.registerHandler(MessageTriggerEnumType::BootNotification, *this);
+    trigger_manager.registerHandler(MessageTriggerEnumType::Heartbeat, *this);
+    trigger_manager.registerHandler(MessageTriggerEnumType::StatusNotification, *this);
+    msg_dispatcher.registerHandler(CHANGEAVAILABILITY_ACTION, *this);
+
+    // Look for HeartBeatInterval variable in the device model
+    GetVariableDataType var_req;
+    var_req.component.name.assign("OCPPCommCtrlr");
+    var_req.variable.name.assign("HeartbeatInterval");
+    GetVariableResultType var_res = m_device_model.getVariable(var_req);
+    if (var_res.attributeStatus == GetVariableStatusEnumType::Accepted)
+    {
+        m_heartbeat_interval = std::chrono::seconds(std::atoi(var_res.attributeValue.value().c_str()));
+    }
+    else
+    {
+        LOG_WARNING << "OCPPCommCtrlr.HeartbeatInterval not present in the device model, using default value = 1h";
+        m_heartbeat_interval = std::chrono::hours(1);
+    }
+}
+
+/** @brief Constructor */
+StatusManager::StatusManager(const ocpp::config::IChargePointConfig20& stack_config,
+                             IDeviceModel&                             device_model,
+                             IChargePointEventsHandler20&              events_handler,
+                             ocpp::config::IInternalConfigManager&     internal_config,
+                             ocpp::helpers::ITimerPool&                timer_pool,
+                             ocpp::helpers::WorkerThreadPool&          worker_pool,
+                             Connectors&                               connectors,
+                             ocpp::messages::IMessageDispatcher&       msg_dispatcher,
+                             const ocpp::messages::GenericMessagesConverter& messages_converter,
+                             ocpp::messages::GenericMessageSender&     msg_sender,
+                             ITriggerMessageManager&                   trigger_manager,
+                             ocpp::types::ocpp20::BootReasonEnumType   boot_reason)
+    : GenericMessageHandler<ChangeAvailabilityReq, ChangeAvailabilityConf>(CHANGEAVAILABILITY_ACTION, messages_converter),
+      m_stack_config(stack_config),
+      m_device_model(device_model),
+      m_basic_events_handler(nullptr),
+      m_events_handler(&events_handler),
+      m_internal_config(internal_config),
+      m_worker_pool(worker_pool),
+      m_connectors(connectors),
+      m_msg_sender(msg_sender),
+      m_boot_reason(boot_reason),
+      m_registration_status(RegistrationStatusEnumType::Rejected),
+      m_force_boot_notification(false),
+      m_boot_notification_sent(false),
+      m_boot_notification_timer(timer_pool, "Boot notification"),
+      m_heartbeat_timer(timer_pool, "Heartbeat"),
+      m_heartbeat_interval(0),
+      m_next_heartbeat_timestamp(std::chrono::steady_clock::now() + MANDATORY_HEARTBEAT_PERIOD),
+      m_last_disconnect_timestamp()
+{
+    m_boot_notification_timer.setCallback([this] { m_worker_pool.run<void>(std::bind(&StatusManager::bootNotificationProcess, this)); });
+    m_heartbeat_timer.setCallback([this] { m_worker_pool.run<void>(std::bind(&StatusManager::heartBeatProcess, this)); });
+
+    trigger_manager.registerHandler(MessageTriggerEnumType::BootNotification, *this);
+    trigger_manager.registerHandler(MessageTriggerEnumType::Heartbeat, *this);
+    trigger_manager.registerHandler(MessageTriggerEnumType::StatusNotification, *this);
+    msg_dispatcher.registerHandler(CHANGEAVAILABILITY_ACTION, *this);
 
     // Look for HeartBeatInterval variable in the device model
     GetVariableDataType var_req;
@@ -118,6 +183,12 @@ void StatusManager::updateConnectionStatus(bool is_connected)
 {
     if (is_connected)
     {
+        // Send a new BootNotification after a reconnect, as the OCPP 1.6 manager does.
+        if (m_registration_status == RegistrationStatusEnumType::Accepted)
+        {
+            m_force_boot_notification = true;
+        }
+
         // If not accepted by the central system, restart boot notification process
         if (m_force_boot_notification || (m_registration_status != RegistrationStatusEnumType::Accepted))
         {
@@ -172,6 +243,7 @@ void StatusManager::updateConnectionStatus(bool is_connected)
     else
     {
         // Stop boot notification and heartbeat processes
+        m_boot_notification_sent = false;
         m_boot_notification_timer.stop();
         m_heartbeat_timer.stop();
         m_last_disconnect_timestamp = std::chrono::steady_clock::now();
@@ -374,6 +446,96 @@ bool StatusManager::onTriggerMessage(ocpp::types::ocpp20::MessageTriggerEnumType
     return ret;
 }
 
+/** @copydoc bool GenericMessageHandler<RequestType, ResponseType>::handleMessage(const RequestType&,
+ *                                                                                ResponseType&,
+ *                                                                                std::string&,
+ *                                                                                std::string&)
+ */
+bool StatusManager::handleMessage(const ocpp::messages::ocpp20::ChangeAvailabilityReq& request,
+                                  ocpp::messages::ocpp20::ChangeAvailabilityConf&      response,
+                                  std::string&                                         error_code,
+                                  std::string&                                         error_message)
+{
+    bool ret = false;
+
+    LOG_INFO << "Change availability requested : "
+             << "operationalStatus = " << OperationalStatusEnumTypeHelper.toString(request.operationalStatus)
+             << " - EVSE = " << (request.evse.isSet() ? std::to_string(request.evse.value().id) : "not set")
+             << " - connectorId = "
+             << ((request.evse.isSet() && request.evse.value().connectorId.isSet())
+                     ? std::to_string(request.evse.value().connectorId.value())
+                     : "not set");
+
+    std::vector<std::pair<unsigned int, unsigned int>> connectors;
+    if (request.evse.isSet())
+    {
+        const unsigned int evse_id = static_cast<unsigned int>(request.evse.value().id);
+        const Evse*        evse    = m_connectors.getEvse(evse_id);
+        if (evse == nullptr)
+        {
+            error_code    = ocpp::rpc::IRpc::RPC_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
+            error_message = "Invalid EVSE id";
+            return ret;
+        }
+
+        if (request.evse.value().connectorId.isSet())
+        {
+            const unsigned int connector_id = static_cast<unsigned int>(request.evse.value().connectorId.value());
+            if (m_connectors.getConnector(evse_id, connector_id) == nullptr)
+            {
+                error_code    = ocpp::rpc::IRpc::RPC_ERROR_PROPERTY_CONSTRAINT_VIOLATION;
+                error_message = "Invalid connector id";
+                return ret;
+            }
+            connectors.emplace_back(evse_id, connector_id);
+        }
+        else
+        {
+            for (const Connector* connector : evse->connectors)
+            {
+                connectors.emplace_back(evse_id, connector->id);
+            }
+        }
+    }
+    else
+    {
+        for (const Evse* evse : m_connectors.getEvses())
+        {
+            for (const Connector* connector : evse->connectors)
+            {
+                connectors.emplace_back(evse->id, connector->id);
+            }
+        }
+    }
+
+    response.status = ChangeAvailabilityStatusEnumType::Accepted;
+    if (m_events_handler)
+    {
+        ret = m_events_handler->onChangeAvailability(request, response, error_code, error_message);
+    }
+    else
+    {
+        ret = true;
+    }
+
+    if (ret && (response.status == ChangeAvailabilityStatusEnumType::Accepted))
+    {
+        const ConnectorStatusEnumType status = (request.operationalStatus == OperationalStatusEnumType::Operative)
+                                                   ? ConnectorStatusEnumType::Available
+                                                   : ConnectorStatusEnumType::Unavailable;
+        for (const auto& connector : connectors)
+        {
+            const unsigned int evse_id      = connector.first;
+            const unsigned int connector_id = connector.second;
+            m_worker_pool.run<void>([this, evse_id, connector_id, status] { updateConnectorStatus(evse_id, connector_id, status); });
+        }
+    }
+
+    LOG_INFO << "Change availability " << ChangeAvailabilityStatusEnumTypeHelper.toString(response.status);
+
+    return ret;
+}
+
 /** @brief Boot notification process thread */
 void StatusManager::bootNotificationProcess()
 {
@@ -453,7 +615,14 @@ void StatusManager::bootNotificationProcess()
             m_internal_config.setKey(LAST_REGISTRATION_STATUS_KEY, registration_status);
 
             // Notify boot
-            m_events_handler.bootNotification(m_registration_status, boot_conf.currentTime);
+            if (m_events_handler)
+            {
+                m_events_handler->bootNotification(m_registration_status, boot_conf.currentTime);
+            }
+            else if (m_basic_events_handler)
+            {
+                m_basic_events_handler->bootNotification(m_registration_status, boot_conf.currentTime);
+            }
         }
         else
         {
@@ -492,7 +661,14 @@ void StatusManager::heartBeatProcess()
         LOG_INFO << "Heartbeat : " << heartbeat_conf.currentTime.str();
 
         m_next_heartbeat_timestamp = std::chrono::steady_clock::now() + MANDATORY_HEARTBEAT_PERIOD;
-        m_events_handler.datetimeReceived(heartbeat_conf.currentTime);
+        if (m_events_handler)
+        {
+            m_events_handler->datetimeReceived(heartbeat_conf.currentTime);
+        }
+        else if (m_basic_events_handler)
+        {
+            m_basic_events_handler->datetimeReceived(heartbeat_conf.currentTime);
+        }
         if (m_heartbeat_timer.isSingleShot())
         {
             m_heartbeat_timer.restart(m_heartbeat_interval);

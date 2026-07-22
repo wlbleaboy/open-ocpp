@@ -44,10 +44,15 @@ along with OpenOCPP. If not, see <http://www.gnu.org/licenses/>.
 #include "GetTransactionStatus20.h"
 #include "GetVariables20.h"
 #include "InstallCertificate20.h"
+#include "IdTokenType20.h"
+#include "MeterValueType20.h"
 #include "PublishFirmware20.h"
+#include "ReadingContextEnumType20.h"
 #include "RequestStartTransaction20.h"
 #include "RequestStopTransaction20.h"
 #include "ReserveNow20.h"
+#include "ReservationUpdateStatusEnumType20.h"
+#include "RegistrationStatusEnumType20.h"
 #include "Reset20.h"
 #include "SendLocalList20.h"
 #include "SetChargingProfile20.h"
@@ -84,6 +89,88 @@ class IChargePointEventsHandler20
      * @param isConnected true if the charge point is connected to the central system, false otherwise
      */
     virtual void connectionStateChanged(bool isConnected) = 0;
+
+    /**
+     * @brief Called when a reservation has been accepted and stored
+     * @param reservation_id Reservation identifier
+     * @param evse_id Reserved EVSE identifier, 0 for station-wide reservations
+     * @param id_token Id token associated with the reservation
+     */
+    virtual void reservationStarted(int reservation_id, int evse_id, const ocpp::types::ocpp20::IdTokenType& id_token) = 0;
+
+    /**
+     * @brief Called when a reservation has ended
+     * @param reservation_id Reservation identifier
+     * @param evse_id Reserved EVSE identifier, 0 for station-wide reservations
+     * @param status End status reported through ReservationStatusUpdate
+     */
+    virtual void reservationEnded(int                                                   reservation_id,
+                                  int                                                   evse_id,
+                                  ocpp::types::ocpp20::ReservationUpdateStatusEnumType status) = 0;
+
+    /**
+     * @brief Called when a MeterValues sample is required
+     * @param evse_id EVSE identifier
+     * @param context Reading context
+     * @param meter_value Meter value to fill
+     * @return true if a value has been sampled, false otherwise
+     */
+    virtual bool getMeterValue(unsigned int                                evse_id,
+                               ocpp::types::ocpp20::ReadingContextEnumType context,
+                               ocpp::types::ocpp20::MeterValueType&        meter_value)
+    {
+        (void)evse_id;
+        (void)context;
+        (void)meter_value;
+        return false;
+    }
+
+    /**
+     * @brief Called when a remote transaction start request has been authorized by the stack
+     * @param evse_id EVSE identifier requested by the CSMS
+     * @param remote_start_id Remote start identifier from the CSMS
+     * @param id_token Id token to use for the transaction
+     * @return true if the application accepts the remote start, false otherwise
+     */
+    virtual bool remoteStartTransactionRequested(unsigned int                          evse_id,
+                                                 int                                   remote_start_id,
+                                                 const ocpp::types::ocpp20::IdTokenType& id_token)
+    {
+        (void)evse_id;
+        (void)remote_start_id;
+        (void)id_token;
+        return true;
+    }
+
+    /**
+     * @brief Called when a remote transaction stop request has been accepted by the stack
+     * @param transaction_id Transaction identifier requested by the CSMS
+     * @return true if the application accepts the remote stop, false otherwise
+     */
+    virtual bool remoteStopTransactionRequested(const std::string& transaction_id)
+    {
+        (void)transaction_id;
+        return true;
+    }
+
+    /**
+     * @brief Called on boot notification response from the central system
+     * @param status Registration status
+     * @param datetime Date and time of the central system
+     */
+    virtual void bootNotification(ocpp::types::ocpp20::RegistrationStatusEnumType status, const ocpp::types::DateTime& datetime)
+    {
+        (void)status;
+        (void)datetime;
+    }
+
+    /**
+     * @brief Called when the date and time must be adjusted with the one of the central system
+     */
+    virtual void datetimeReceived(const ocpp::types::DateTime& datetime)
+    {
+        (void)datetime;
+    }
 
     // OCPP operations
     /**

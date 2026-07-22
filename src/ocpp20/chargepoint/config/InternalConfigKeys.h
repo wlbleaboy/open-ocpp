@@ -42,6 +42,8 @@ static constexpr const char* TOTAL_DISCONNECTED_TIME_KEY = "TotalDisconnectedTim
 static constexpr const char* LAST_CONNECTION_URL_KEY = "LastConnectionUrl";
 /** @brief Configuration key : last registration status */
 static constexpr const char* LAST_REGISTRATION_STATUS_KEY = "LastRegistrationStatus";
+/** @brief Configuration key : local authorization list version */
+static constexpr const char* LOCAL_LIST_VERSION_KEY = "LocalAuthListVersion";
 
 } // namespace ocpp20
 } // namespace chargepoint

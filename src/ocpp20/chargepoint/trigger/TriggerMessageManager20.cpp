@@ -86,9 +86,11 @@ bool TriggerMessageManager::handleMessage(const ocpp::messages::ocpp20::TriggerM
     }
     else
     {
-        // Check EVSE/connector validity
+        // Check EVSE/connector validity only for EVSE-scoped trigger messages.
+        const bool validate_evse = ((request.requestedMessage == MessageTriggerEnumType::StatusNotification) ||
+                                    (request.requestedMessage == MessageTriggerEnumType::MeterValues));
         response.status = TriggerMessageStatusEnumType::Accepted;
-        if (request.evse.isSet())
+        if (validate_evse && request.evse.isSet())
         {
             if (m_connectors.getEvse(request.evse.value().id))
             {

@@ -42,6 +42,12 @@ class ChargePointDemoConfig
     /** @brief Set the value of a stack internal configuration key */
     void setStackConfigValue(const std::string& key, const std::string& value) { m_stack_config.setConfigValue(key, value); }
 
+    /** @brief Get the value of a demo configuration key */
+    ocpp::helpers::IniFile::Value getConfig(const std::string& section, const std::string& key)
+    {
+        return m_config.get(section, key, "");
+    }
+
     /** @brief Get the value of a variable of the device model */
     bool getDeviceModelValue(const ocpp::types::ocpp20::ComponentType& component,
                              const ocpp::types::ocpp20::VariableType&  variable,

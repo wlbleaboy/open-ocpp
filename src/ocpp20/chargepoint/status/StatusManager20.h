@@ -19,6 +19,8 @@ along with OpenOCPP. If not, see <http://www.gnu.org/licenses/>.
 #ifndef OPENOCPP_OCPP20_STATUSMANAGER20_H
 #define OPENOCPP_OCPP20_STATUSMANAGER20_H
 
+#include "ChangeAvailability20.h"
+#include "GenericMessageHandler.h"
 #include "IStatusManager20.h"
 #include "ITriggerMessageManager20.h"
 #include "Timer.h"
@@ -28,6 +30,8 @@ namespace ocpp
 // Forward declarations
 namespace messages
 {
+class GenericMessagesConverter;
+class IMessageDispatcher;
 class GenericMessageSender;
 } // namespace messages
 namespace config
@@ -48,10 +52,15 @@ namespace ocpp20
 
 class Connectors;
 class IBasicChargePointEventsHandler;
+class IChargePointEventsHandler20;
 class IDeviceModel;
 
 /** @brief Handle charge point status (boot notification, status notification, heartbeat) */
-class StatusManager : public IStatusManager, public ITriggerMessageManager::ITriggerMessageHandler
+class StatusManager
+    : public IStatusManager,
+      public ITriggerMessageManager::ITriggerMessageHandler,
+      public ocpp::messages::GenericMessageHandler<ocpp::messages::ocpp20::ChangeAvailabilityReq,
+                                                   ocpp::messages::ocpp20::ChangeAvailabilityConf>
 {
   public:
     /** @brief Constructor */
@@ -62,6 +71,22 @@ class StatusManager : public IStatusManager, public ITriggerMessageManager::ITri
                   ocpp::helpers::ITimerPool&                timer_pool,
                   ocpp::helpers::WorkerThreadPool&          worker_pool,
                   Connectors&                               connectors,
+                  ocpp::messages::IMessageDispatcher&       msg_dispatcher,
+                  const ocpp::messages::GenericMessagesConverter& messages_converter,
+                  ocpp::messages::GenericMessageSender&     msg_sender,
+                  ITriggerMessageManager&                   trigger_manager,
+                  ocpp::types::ocpp20::BootReasonEnumType   boot_reason);
+
+    /** @brief Constructor */
+    StatusManager(const ocpp::config::IChargePointConfig20& stack_config,
+                  IDeviceModel&                             device_model,
+                  IChargePointEventsHandler20&              events_handler,
+                  ocpp::config::IInternalConfigManager&     internal_config,
+                  ocpp::helpers::ITimerPool&                timer_pool,
+                  ocpp::helpers::WorkerThreadPool&          worker_pool,
+                  Connectors&                               connectors,
+                  ocpp::messages::IMessageDispatcher&       msg_dispatcher,
+                  const ocpp::messages::GenericMessagesConverter& messages_converter,
                   ocpp::messages::GenericMessageSender&     msg_sender,
                   ITriggerMessageManager&                   trigger_manager,
                   ocpp::types::ocpp20::BootReasonEnumType   boot_reason);
@@ -99,13 +124,26 @@ class StatusManager : public IStatusManager, public ITriggerMessageManager::ITri
     bool onTriggerMessage(ocpp::types::ocpp20::MessageTriggerEnumType                 message,
                           const ocpp::types::Optional<ocpp::types::ocpp20::EVSEType>& evse) override;
 
+    // GenericMessageHandler interface
+
+    /** @copydoc bool GenericMessageHandler<RequestType, ResponseType>::handleMessage(const RequestType&,
+     *                                                                                ResponseType&,
+     *                                                                                std::string&,
+     *                                                                                std::string&)
+     */
+    bool handleMessage(const ocpp::messages::ocpp20::ChangeAvailabilityReq& request,
+                       ocpp::messages::ocpp20::ChangeAvailabilityConf&      response,
+                       std::string&                                         error_code,
+                       std::string&                                         error_message) override;
+
   private:
     /** @brief Stack configuration */
     const ocpp::config::IChargePointConfig20& m_stack_config;
     /** @brief Device model */
     IDeviceModel& m_device_model;
     /** @brief User defined events handler */
-    IBasicChargePointEventsHandler& m_events_handler;
+    IBasicChargePointEventsHandler* m_basic_events_handler;
+    IChargePointEventsHandler20* m_events_handler;
     /** @brief Charge point's internal configuration */
     ocpp::config::IInternalConfigManager& m_internal_config;
     /** @brief Worker thread pool */

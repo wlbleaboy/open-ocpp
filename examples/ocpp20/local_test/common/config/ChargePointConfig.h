@@ -30,6 +30,8 @@ SOFTWARE.
 
 /** @brief Section name for the parameters */
 static const std::string STACK_PARAMS = "ChargePoint";
+/** @brief Section name for sampled data controller parameters */
+static const std::string SAMPLED_DATA_CTRLR_PARAMS = "SampledDataCtrlr";
 
 /** @brief Charge Point stack internal configuration */
 class ChargePointConfig : public ocpp::config::IChargePointConfig20
@@ -106,6 +108,11 @@ class ChargePointConfig : public ocpp::config::IChargePointConfig20
 
     /** @brief Maximum number of entries in the log (0 = no logs in database) */
     unsigned int logMaxEntriesCount() const override { return get<unsigned int>("LogMaxEntriesCount"); }
+    /** @brief Transaction updated sampled meter values interval */
+    std::chrono::seconds txUpdatedInterval() const override
+    {
+        return std::chrono::seconds(m_config.get(SAMPLED_DATA_CTRLR_PARAMS, "TxUpdatedInterval").toUInt());
+    }
 
     // Security
 

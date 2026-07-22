@@ -441,7 +441,7 @@
 			"variables": [
 				{
 					"name": "CustomImplementationEnabled",
-					"instance": "<VendorId>",
+					"instance": "VendorId",
 					"attributes": 
 					{
 						"mutability": "ReadWrite"
@@ -1170,7 +1170,7 @@
 				},
 				{
 					"name": "FieldLength",
-					"instance": "<message>.<field>",
+					"instance": "message.field",
 					"attributes": 
 					{
 						"mutability": "ReadOnly"
@@ -1871,7 +1871,7 @@
 		},
 		{
 			"name": "EVSE",
-			"instance": "EVSE 1",
+			"instance": "EVSE1",
 			"evse": 1,
 			"variables": [
 				{

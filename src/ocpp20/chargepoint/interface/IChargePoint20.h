@@ -23,28 +23,22 @@ along with OpenOCPP. If not, see <http://www.gnu.org/licenses/>.
 
 #include "Authorize20.h"
 #include "BootNotification20.h"
-#include "ClearedChargingLimit20.h"
-#include "CostUpdated20.h"
 #include "DataTransfer20.h"
 #include "FirmwareStatusNotification20.h"
 #include "Heartbeat20.h"
 #include "IChargePointConfig20.h"
 #include "IChargePointEventsHandler20.h"
+#include "IDeviceModel20.h"
+#include "INotifyManager20.h"
+#include "ISecurityManager20.h"
+#include "ITransactionManager20.h"
 #include "LogStatusNotification20.h"
 #include "MeterValues20.h"
-#include "NotifyChargingLimit20.h"
-#include "NotifyCustomerInformation20.h"
-#include "NotifyDisplayMessages20.h"
-#include "NotifyEVChargingNeeds20.h"
-#include "NotifyEVChargingSchedule20.h"
-#include "NotifyEvent20.h"
-#include "NotifyMonitoringReport20.h"
-#include "NotifyReport20.h"
+#include "IMeterValuesManager20.h"
+#include "ISmartChargingManager20.h"
 #include "PublishFirmwareStatusNotification20.h"
 #include "ReportChargingProfiles20.h"
 #include "ReservationStatusUpdate20.h"
-#include "SecurityEventNotification20.h"
-#include "SignCertificate20.h"
 #include "StatusNotification20.h"
 #include "TransactionEvent20.h"
 
@@ -80,6 +74,16 @@ class IChargePoint20
                                                   IChargePointEventsHandler20&              events_handler);
 
     /**
+     * @brief Instanciate a charge point with a device model
+     * @param stack_config Stack configuration
+     * @param device_model Device model
+     * @param event_handler Stack event handler
+     */
+    static std::unique_ptr<IChargePoint20> create(const ocpp::config::IChargePointConfig20& stack_config,
+                                                  IDeviceModel&                             device_model,
+                                                  IChargePointEventsHandler20&              events_handler);
+
+    /**
      * @brief Instanciate a charge point with the provided timer and worker pools
      *        To use when you have to instanciate multiple Central System / Charge Point
      *        => Allow to reduce thread and memory usage
@@ -89,6 +93,20 @@ class IChargePoint20
      * @param worker_pool Worker thread pool
      */
     static std::unique_ptr<IChargePoint20> create(const ocpp::config::IChargePointConfig20&        stack_config,
+                                                  IChargePointEventsHandler20&                     events_handler,
+                                                  std::shared_ptr<ocpp::helpers::ITimerPool>       timer_pool,
+                                                  std::shared_ptr<ocpp::helpers::WorkerThreadPool> worker_pool);
+
+    /**
+     * @brief Instanciate a charge point with the provided timer and worker pools and a device model
+     * @param stack_config Stack configuration
+     * @param device_model Device model
+     * @param event_handler Stack event handler
+     * @param timer_pool Timer pool
+     * @param worker_pool Worker thread pool
+     */
+    static std::unique_ptr<IChargePoint20> create(const ocpp::config::IChargePointConfig20&        stack_config,
+                                                  IDeviceModel&                                    device_model,
                                                   IChargePointEventsHandler20&                     events_handler,
                                                   std::shared_ptr<ocpp::helpers::ITimerPool>       timer_pool,
                                                   std::shared_ptr<ocpp::helpers::WorkerThreadPool> worker_pool);
@@ -107,6 +125,30 @@ class IChargePoint20
      * @return Worker pool associated to the charge point
      */
     virtual ocpp::helpers::WorkerThreadPool& getWorkerPool() = 0;
+
+    /**
+     * @brief Get the Notify messages manager associated to the charge point
+     * @return Notify messages manager associated to the charge point
+     */
+    virtual INotifyManager20& getNotifyManager() = 0;
+
+    /**
+     * @brief Get the security manager associated to the charge point
+     * @return Security manager associated to the charge point
+     */
+    virtual ISecurityManager20& getSecurityManager() = 0;
+
+    /**
+     * @brief Get the smart charging manager associated to the charge point
+     * @return Smart charging manager associated to the charge point
+     */
+    virtual ISmartChargingManager20& getSmartChargingManager() = 0;
+
+    /**
+     * @brief Get the transaction manager associated to the charge point
+     * @return Transaction manager associated to the charge point
+     */
+    virtual ITransactionManager20& getTransactionManager() = 0;
 
     /**
      * @brief Reset the charge point's internal data (can be done only when the charge point is stopped)
@@ -132,295 +174,149 @@ class IChargePoint20
      */
     virtual bool reconnect() = 0;
 
-    // OCPP operations
     /**
-     * @brief Send a BootNotification message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Start a transaction and send the corresponding TransactionEvent
+     * @param evse_id EVSE identifier
+     * @param connector_id Connector identifier
+     * @param id_token Id token used to authorize the transaction
+     * @param trigger_reason Reason for the transaction event
+     * @param transaction_id Generated transaction id
+     * @return true if the transaction has been started, false otherwise
      */
-    virtual bool call(const ocpp::messages::ocpp20::BootNotificationReq& request,
-                      ocpp::messages::ocpp20::BootNotificationConf&      response,
-                      std::string&                                       error,
-                      std::string&                                       message) = 0;
+    virtual bool startTransaction(unsigned int                                evse_id,
+                                  unsigned int                                connector_id,
+                                  const ocpp::types::ocpp20::IdTokenType&     id_token,
+                                  ocpp::types::ocpp20::TriggerReasonEnumType trigger_reason,
+                                  std::string&                                transaction_id) = 0;
+
     /**
-     * @brief Send a Authorize message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Start a transaction initiated by a remote start request and send the corresponding TransactionEvent
+     * @param evse_id EVSE identifier
+     * @param connector_id Connector identifier
+     * @param id_token Id token used to authorize the transaction
+     * @param trigger_reason Reason for the transaction event
+     * @param remote_start_id Remote start identifier received from the CSMS
+     * @param transaction_id Generated transaction id
+     * @return true if the transaction has been started, false otherwise
      */
-    virtual bool call(const ocpp::messages::ocpp20::AuthorizeReq& request,
-                      ocpp::messages::ocpp20::AuthorizeConf&      response,
-                      std::string&                                error,
-                      std::string&                                message) = 0;
+    virtual bool startTransaction(unsigned int                                evse_id,
+                                  unsigned int                                connector_id,
+                                  const ocpp::types::ocpp20::IdTokenType&     id_token,
+                                  ocpp::types::ocpp20::TriggerReasonEnumType trigger_reason,
+                                  int                                         remote_start_id,
+                                  std::string&                                transaction_id) = 0;
+
     /**
-     * @brief Send a ClearedChargingLimit message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Start a transaction and send the corresponding TransactionEvent
+     * @param evse_id EVSE identifier
+     * @param connector_id Connector identifier
+     * @param id_token Id token string used to authorize the transaction
+     * @param transaction_id Generated transaction id
+     * @return true if the transaction has been started, false otherwise
      */
-    virtual bool call(const ocpp::messages::ocpp20::ClearedChargingLimitReq& request,
-                      ocpp::messages::ocpp20::ClearedChargingLimitConf&      response,
-                      std::string&                                           error,
-                      std::string&                                           message) = 0;
+    virtual bool startTransaction(unsigned int       evse_id,
+                                  unsigned int       connector_id,
+                                  const std::string& id_token,
+                                  std::string&       transaction_id) = 0;
+
     /**
-     * @brief Send a CostUpdated message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Send an update for an ongoing transaction
+     * @param transaction_id Transaction id
+     * @param trigger_reason Reason for the transaction event
+     * @param meter_values Optional meter values to include
+     * @return true if the transaction update has been sent, false otherwise
      */
-    virtual bool call(const ocpp::messages::ocpp20::CostUpdatedReq& request,
-                      ocpp::messages::ocpp20::CostUpdatedConf&      response,
-                      std::string&                                  error,
-                      std::string&                                  message) = 0;
+    virtual bool updateTransaction(const std::string&                                      transaction_id,
+                                   ocpp::types::ocpp20::TriggerReasonEnumType              trigger_reason,
+                                   const std::vector<ocpp::types::ocpp20::MeterValueType>& meter_values) = 0;
+
     /**
-     * @brief Send a DataTransfer message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Stop a transaction and send the corresponding TransactionEvent
+     * @param transaction_id Transaction id
+     * @param reason Stop reason
+     * @param trigger_reason Reason for the transaction event
+     * @param id_token Optional id token used to stop the transaction
+     * @param meter_values Optional meter values to include
+     * @return true if the transaction has been stopped, false otherwise
      */
-    virtual bool call(const ocpp::messages::ocpp20::DataTransferReq& request,
-                      ocpp::messages::ocpp20::DataTransferConf&      response,
-                      std::string&                                   error,
-                      std::string&                                   message) = 0;
+    virtual bool stopTransaction(const std::string&                                      transaction_id,
+                                 ocpp::types::ocpp20::ReasonEnumType                    reason,
+                                 ocpp::types::ocpp20::TriggerReasonEnumType             trigger_reason,
+                                 const ocpp::types::ocpp20::IdTokenType*                id_token,
+                                 const std::vector<ocpp::types::ocpp20::MeterValueType>& meter_values) = 0;
+
     /**
-     * @brief Send a FirmwareStatusNotification message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Stop a transaction and send the corresponding TransactionEvent
+     * @param transaction_id Transaction id
+     * @param id_token Id token string used to stop the transaction (leave empty if no id token)
+     * @param reason Stop reason
+     * @return true if the transaction has been stopped, false otherwise
      */
-    virtual bool call(const ocpp::messages::ocpp20::FirmwareStatusNotificationReq& request,
-                      ocpp::messages::ocpp20::FirmwareStatusNotificationConf&      response,
-                      std::string&                                                 error,
-                      std::string&                                                 message) = 0;
+    virtual bool stopTransaction(const std::string&                       transaction_id,
+                                 const std::string&                       id_token,
+                                 ocpp::types::ocpp20::ReasonEnumType     reason) = 0;
+
     /**
-     * @brief Send a Heartbeat message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Start periodic MeterValues sampling for an EVSE
+     * @param evse_id EVSE identifier
+     * @param interval Sampling interval
      */
-    virtual bool call(const ocpp::messages::ocpp20::HeartbeatReq& request,
-                      ocpp::messages::ocpp20::HeartbeatConf&      response,
-                      std::string&                                error,
-                      std::string&                                message) = 0;
+    virtual void startPeriodicMeterValues(unsigned int evse_id, std::chrono::seconds interval) = 0;
+
     /**
-     * @brief Send a LogStatusNotification message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Stop periodic MeterValues sampling for an EVSE
+     * @param evse_id EVSE identifier
      */
-    virtual bool call(const ocpp::messages::ocpp20::LogStatusNotificationReq& request,
-                      ocpp::messages::ocpp20::LogStatusNotificationConf&      response,
-                      std::string&                                            error,
-                      std::string&                                            message) = 0;
+    virtual void stopPeriodicMeterValues(unsigned int evse_id) = 0;
+
     /**
-     * @brief Send a MeterValues message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Start transaction sampled meter values
+     * @param transaction_id Transaction id
+     * @param evse_id EVSE identifier
+     * @param interval Sampling interval
      */
-    virtual bool call(const ocpp::messages::ocpp20::MeterValuesReq& request,
-                      ocpp::messages::ocpp20::MeterValuesConf&      response,
-                      std::string&                                  error,
-                      std::string&                                  message) = 0;
+    virtual void startTransactionSampledMeterValues(const std::string& transaction_id,
+                                                    unsigned int       evse_id,
+                                                    std::chrono::seconds interval) = 0;
+
     /**
-     * @brief Send a NotifyChargingLimit message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Stop transaction sampled meter values
+     * @param transaction_id Transaction id
      */
-    virtual bool call(const ocpp::messages::ocpp20::NotifyChargingLimitReq& request,
-                      ocpp::messages::ocpp20::NotifyChargingLimitConf&      response,
-                      std::string&                                          error,
-                      std::string&                                          message) = 0;
+    virtual void stopTransactionSampledMeterValues(const std::string& transaction_id) = 0;
+
     /**
-     * @brief Send a NotifyCustomerInformation message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Get stored transaction stop meter values
+     * @param transaction_id Transaction id
+     * @param meter_values Stored meter values
      */
-    virtual bool call(const ocpp::messages::ocpp20::NotifyCustomerInformationReq& request,
-                      ocpp::messages::ocpp20::NotifyCustomerInformationConf&      response,
-                      std::string&                                                error,
-                      std::string&                                                message) = 0;
+    virtual void getTxStopMeterValues(const std::string& transaction_id,
+                                      std::vector<ocpp::types::ocpp20::MeterValueType>& meter_values) = 0;
+
     /**
-     * @brief Send a NotifyDisplayMessages message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Get the active smart charging setpoints for an EVSE and for the whole charging station
+     * @param evse_id Id of the EVSE
+     * @param charging_station_setpoint Charging station setpoint, if any
+     * @param evse_setpoint EVSE setpoint, if any
+     * @param unit Expected setpoint unit
+     * @return true if at least one setpoint has been computed, false otherwise
      */
-    virtual bool call(const ocpp::messages::ocpp20::NotifyDisplayMessagesReq& request,
-                      ocpp::messages::ocpp20::NotifyDisplayMessagesConf&      response,
-                      std::string&                                            error,
-                      std::string&                                            message) = 0;
+    virtual bool getSetpoint(unsigned int                                                 evse_id,
+                             ocpp::types::Optional<ISmartChargingManager20::SmartChargingSetpoint>& charging_station_setpoint,
+                             ocpp::types::Optional<ISmartChargingManager20::SmartChargingSetpoint>& evse_setpoint,
+                             ocpp::types::ocpp20::ChargingRateUnitEnumType unit = ocpp::types::ocpp20::ChargingRateUnitEnumType::A) = 0;
+
     /**
-     * @brief Send a NotifyEVChargingNeeds message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
+     * @brief Notify a new status for a connector
+     * @param evse_id Id of the EVSE
+     * @param connector_id Id of the connector
+     * @param status Status of the connector
+     * @return true if the status has been notified, false otherwise
      */
-    virtual bool call(const ocpp::messages::ocpp20::NotifyEVChargingNeedsReq& request,
-                      ocpp::messages::ocpp20::NotifyEVChargingNeedsConf&      response,
-                      std::string&                                            error,
-                      std::string&                                            message) = 0;
-    /**
-     * @brief Send a NotifyEVChargingSchedule message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::NotifyEVChargingScheduleReq& request,
-                      ocpp::messages::ocpp20::NotifyEVChargingScheduleConf&      response,
-                      std::string&                                               error,
-                      std::string&                                               message) = 0;
-    /**
-     * @brief Send a NotifyEvent message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::NotifyEventReq& request,
-                      ocpp::messages::ocpp20::NotifyEventConf&      response,
-                      std::string&                                  error,
-                      std::string&                                  message) = 0;
-    /**
-     * @brief Send a NotifyMonitoringReport message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::NotifyMonitoringReportReq& request,
-                      ocpp::messages::ocpp20::NotifyMonitoringReportConf&      response,
-                      std::string&                                             error,
-                      std::string&                                             message) = 0;
-    /**
-     * @brief Send a NotifyReport message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::NotifyReportReq& request,
-                      ocpp::messages::ocpp20::NotifyReportConf&      response,
-                      std::string&                                   error,
-                      std::string&                                   message) = 0;
-    /**
-     * @brief Send a PublishFirmwareStatusNotification message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::PublishFirmwareStatusNotificationReq& request,
-                      ocpp::messages::ocpp20::PublishFirmwareStatusNotificationConf&      response,
-                      std::string&                                                        error,
-                      std::string&                                                        message) = 0;
-    /**
-     * @brief Send a ReportChargingProfiles message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::ReportChargingProfilesReq& request,
-                      ocpp::messages::ocpp20::ReportChargingProfilesConf&      response,
-                      std::string&                                             error,
-                      std::string&                                             message) = 0;
-    /**
-     * @brief Send a ReservationStatusUpdate message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::ReservationStatusUpdateReq& request,
-                      ocpp::messages::ocpp20::ReservationStatusUpdateConf&      response,
-                      std::string&                                              error,
-                      std::string&                                              message) = 0;
-    /**
-     * @brief Send a SecurityEventNotification message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::SecurityEventNotificationReq& request,
-                      ocpp::messages::ocpp20::SecurityEventNotificationConf&      response,
-                      std::string&                                                error,
-                      std::string&                                                message) = 0;
-    /**
-     * @brief Send a SignCertificate message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::SignCertificateReq& request,
-                      ocpp::messages::ocpp20::SignCertificateConf&      response,
-                      std::string&                                      error,
-                      std::string&                                      message) = 0;
-    /**
-     * @brief Send a StatusNotification message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::StatusNotificationReq& request,
-                      ocpp::messages::ocpp20::StatusNotificationConf&      response,
-                      std::string&                                         error,
-                      std::string&                                         message) = 0;
-    /**
-     * @brief Send a TransactionEvent message to the central system
-     * @param request Request to send
-     * @param response Received response
-     * @param error Error (Empty if not a CallError)
-     * @param message Error message (Empty if not a CallError)
-     * @return true if the request has been sent and a response has been received, false otherwise
-     */
-    virtual bool call(const ocpp::messages::ocpp20::TransactionEventReq& request,
-                      ocpp::messages::ocpp20::TransactionEventConf&      response,
-                      std::string&                                       error,
-                      std::string&                                       message) = 0;
+    virtual bool statusNotification(unsigned int                                 evse_id,
+                                    unsigned int                                 connector_id,
+                                    ocpp::types::ocpp20::ConnectorStatusEnumType status) = 0;
+
 };
 
 } // namespace ocpp20

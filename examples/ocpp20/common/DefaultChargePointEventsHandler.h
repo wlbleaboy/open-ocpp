@@ -29,10 +29,12 @@ SOFTWARE.
 #include "IChargePointEventsHandler20.h"
 #include "IDeviceModel20.h"
 
+#include <atomic>
 #include <filesystem>
 #include <vector>
 
 class ChargePointDemoConfig;
+class Ocpp20MeterValueProvider;
 
 /** @brief Default charge point event handlers implementation for the examples */
 class DefaultChargePointEventsHandler : public ocpp::chargepoint::ocpp20::IChargePointEventsHandler20,
@@ -50,8 +52,14 @@ class DefaultChargePointEventsHandler : public ocpp::chargepoint::ocpp20::ICharg
     /** @brief Set the associated Charge Point instance */
     void setChargePoint(ocpp::chargepoint::ocpp20::IChargePoint20& chargepoint) { m_chargepoint = &chargepoint; }
 
+    /** @brief Set the associated meter value provider */
+    void setMeterValueProvider(Ocpp20MeterValueProvider& meter_value_provider) { m_meter_value_provider = &meter_value_provider; }
+
     /** @brief Indicate if the Charge Point is connected */
-    bool isConnected() const { return m_is_connected; }
+    bool isConnected() const { return m_is_connected.load(); }
+
+    /** @brief Indicate if the Charge Point is registered */
+    bool isRegistered() const { return m_is_registered.load(); }
 
     // IDeviceModel interface
 
@@ -68,6 +76,28 @@ class DefaultChargePointEventsHandler : public ocpp::chargepoint::ocpp20::ICharg
 
     /** @copydoc void IChargePointEventsHandler20::connectionStateChanged(bool) */
     void connectionStateChanged(bool isConnected) override;
+
+    /** @copydoc void IChargePointEventsHandler20::bootNotification(ocpp::types::ocpp20::RegistrationStatusEnumType, const ocpp::types::DateTime&) */
+    void bootNotification(ocpp::types::ocpp20::RegistrationStatusEnumType status, const ocpp::types::DateTime& datetime) override;
+
+    /** @copydoc void IChargePointEventsHandler20::reservationStarted(int, int, const ocpp::types::ocpp20::IdTokenType&) */
+    void reservationStarted(int reservation_id, int evse_id, const ocpp::types::ocpp20::IdTokenType& id_token) override;
+
+    /** @copydoc void IChargePointEventsHandler20::reservationEnded(int, int, ocpp::types::ocpp20::ReservationUpdateStatusEnumType) */
+    void reservationEnded(int reservation_id, int evse_id, ocpp::types::ocpp20::ReservationUpdateStatusEnumType status) override;
+
+    /** @copydoc bool IChargePointEventsHandler20::getMeterValue(unsigned int, ocpp::types::ocpp20::ReadingContextEnumType, ocpp::types::ocpp20::MeterValueType&) */
+    bool getMeterValue(unsigned int                                evse_id,
+                       ocpp::types::ocpp20::ReadingContextEnumType context,
+                       ocpp::types::ocpp20::MeterValueType&        meter_value) override;
+
+    /** @copydoc bool IChargePointEventsHandler20::remoteStartTransactionRequested(unsigned int, int, const ocpp::types::ocpp20::IdTokenType&) */
+    bool remoteStartTransactionRequested(unsigned int                                evse_id,
+                                         int                                         remote_start_id,
+                                         const ocpp::types::ocpp20::IdTokenType&     id_token) override;
+
+    /** @copydoc bool IChargePointEventsHandler20::remoteStopTransactionRequested(const std::string&) */
+    bool remoteStopTransactionRequested(const std::string& transaction_id) override;
 
     // OCPP operations
 
@@ -330,8 +360,12 @@ class DefaultChargePointEventsHandler : public ocpp::chargepoint::ocpp20::ICharg
     ocpp::chargepoint::ocpp20::IChargePoint20* m_chargepoint;
     /** @brief Working directory */
     std::filesystem::path m_working_dir;
+    /** @brief Meter value provider */
+    Ocpp20MeterValueProvider* m_meter_value_provider;
     /** @brief Indicate if the Charge Point is connected */
-    bool m_is_connected;
+    std::atomic_bool m_is_connected;
+    /** @brief Indicate if the Charge Point is registered */
+    std::atomic_bool m_is_registered;
 };
 
 #endif // DEFAULTCHARGEPOINTEVENTSHANDLER_H

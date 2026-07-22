@@ -24,7 +24,9 @@ SOFTWARE.
 
 #include "DefaultChargePointEventsHandler.h"
 #include "ChargePointDemoConfig.h"
+#include "IChargerManager.h"
 #include "NotifyReport20.h"
+#include "Ocpp20MeterValueProvider.h"
 
 #include <fstream>
 #include <iostream>
@@ -45,7 +47,14 @@ using namespace ocpp::messages::ocpp20;
 DefaultChargePointEventsHandler::DefaultChargePointEventsHandler(ChargePointDemoConfig&                   config,
                                                                  ocpp::chargepoint::ocpp20::IDeviceModel& device_model,
                                                                  const std::filesystem::path&             working_dir)
-    : m_config(config), m_device_model(device_model), m_chargepoint(nullptr), m_working_dir(working_dir), m_is_connected(false)
+    : m_config(config),
+      m_device_model(device_model),
+      m_chargepoint(nullptr),
+      m_working_dir(working_dir),
+      m_charger_manager(nullptr),
+      m_meter_value_provider(nullptr),
+      m_is_connected(false),
+      m_is_registered(false)
 {
     m_device_model.registerListener(*this);
 }
@@ -57,13 +66,91 @@ DefaultChargePointEventsHandler::~DefaultChargePointEventsHandler() { }
 void DefaultChargePointEventsHandler::connectionFailed()
 {
     cout << "Connection failed" << endl;
+    if (m_charger_manager)
+    {
+        m_charger_manager->connectionFailed();
+    }
 }
 
 /** @copydoc void IChargePointEventsHandler20::connectionStateChanged(bool) */
 void DefaultChargePointEventsHandler::connectionStateChanged(bool isConnected)
 {
     cout << "Connection state changed : " << isConnected << endl;
+    if (m_charger_manager)
+    {
+        m_charger_manager->connectionStateChanged(isConnected);
+    }
     m_is_connected = isConnected;
+    if (isConnected)
+    {
+        m_is_registered = false;
+    }
+    else
+    {
+        m_is_registered = false;
+    }
+}
+
+/** @copydoc void IChargePointEventsHandler20::bootNotification(RegistrationStatusEnumType, const DateTime&) */
+void DefaultChargePointEventsHandler::bootNotification(RegistrationStatusEnumType status, const DateTime& datetime)
+{
+    cout << "BootNotification : " << RegistrationStatusEnumTypeHelper.toString(status) << " - " << datetime.str() << endl;
+    m_is_registered = (status == RegistrationStatusEnumType::Accepted);
+    if (m_charger_manager)
+    {
+        m_charger_manager->bootNotification(status, datetime);
+    }
+}
+
+/** @copydoc void IChargePointEventsHandler20::reservationStarted(int, int, const IdTokenType&) */
+void DefaultChargePointEventsHandler::reservationStarted(int reservation_id, int evse_id, const IdTokenType& id_token)
+{
+    cout << "Reservation started : id = " << reservation_id << " evse = " << evse_id
+         << " token = " << id_token.idToken.str() << endl;
+}
+
+/** @copydoc void IChargePointEventsHandler20::reservationEnded(int, int, ReservationUpdateStatusEnumType) */
+void DefaultChargePointEventsHandler::reservationEnded(int reservation_id, int evse_id, ReservationUpdateStatusEnumType status)
+{
+    cout << "Reservation ended : id = " << reservation_id << " evse = " << evse_id
+         << " status = " << ReservationUpdateStatusEnumTypeHelper.toString(status) << endl;
+}
+
+/** @copydoc bool IChargePointEventsHandler20::getMeterValue(unsigned int, ReadingContextEnumType, MeterValueType&) */
+bool DefaultChargePointEventsHandler::getMeterValue(unsigned int evse_id, ReadingContextEnumType context, MeterValueType& meter_value)
+{
+    if (m_meter_value_provider)
+    {
+        return m_meter_value_provider->getMeterValue(evse_id, context, meter_value);
+    }
+    return false;
+}
+
+/** @copydoc bool IChargePointEventsHandler20::remoteStartTransactionRequested(unsigned int, int, const IdTokenType&) */
+bool DefaultChargePointEventsHandler::remoteStartTransactionRequested(unsigned int evse_id,
+                                                                      int remote_start_id,
+                                                                      const IdTokenType& id_token)
+{
+    cout << "Remote start transaction requested : evse = " << evse_id << " remoteStartId = " << remote_start_id
+         << " token = " << id_token.idToken.str() << endl;
+
+    if (m_charger_manager)
+    {
+        return m_charger_manager->remoteStartTransactionRequested(evse_id, remote_start_id, id_token);
+    }
+    return true;
+}
+
+/** @copydoc bool IChargePointEventsHandler20::remoteStopTransactionRequested(const std::string&) */
+bool DefaultChargePointEventsHandler::remoteStopTransactionRequested(const std::string& transaction_id)
+{
+    cout << "Remote stop transaction requested : transactionId = " << transaction_id << endl;
+
+    if (m_charger_manager)
+    {
+        return m_charger_manager->remoteStopTransactionRequested(transaction_id);
+    }
+    return true;
 }
 
 // IDeviceModel20 interface
@@ -137,9 +224,20 @@ bool DefaultChargePointEventsHandler::onChangeAvailability(const ocpp::messages:
     (void)error;
     (void)message;
 
-    cout << "ChangeAvailability" << endl;
+    cout << "ChangeAvailability : "
+         << (request.evse.isSet() ? std::to_string(request.evse.value().id) : std::string("all EVSEs"))
+         << " - " << OperationalStatusEnumTypeHelper.toString(request.operationalStatus) << endl;
 
-    response.status = ChangeAvailabilityStatusEnumType::Rejected;
+    if (m_charger_manager)
+    {
+        response.status =
+            m_charger_manager->changeAvailability(request.evse.isSet() ? static_cast<unsigned int>(request.evse.value().id) : 0u,
+                                                   request.operationalStatus);
+    }
+    else
+    {
+        response.status = ChangeAvailabilityStatusEnumType::Accepted;
+    }
 
     return ret;
 }
@@ -321,15 +419,14 @@ bool DefaultChargePointEventsHandler::onGetBaseReport(const ocpp::messages::ocpp
     }
     else
     {
+        response.status = GenericDeviceModelStatusEnumType::Accepted;
+
         std::thread report_thread(
             [this, type = request.reportBase, req_id = request.requestId]
             {
-                NotifyReportReq notif_req;
-                notif_req.requestId   = req_id;
-                notif_req.generatedAt = DateTime::now();
-                notif_req.seqNo       = 0;
-                notif_req.tbc         = false;
+                constexpr size_t max_report_data_per_message = 25u;
 
+                std::vector<ReportDataType> report_data_items;
                 const auto& device_model = m_device_model.getModel();
                 for (const auto& [_, comps] : device_model.components)
                 {
@@ -364,7 +461,7 @@ bool DefaultChargePointEventsHandler::onGetBaseReport(const ocpp::messages::ocpp
                                     report_data.variableAttribute.push_back(var.attributes);
                                     report_data.variableCharacteristics = var.characteristics;
 
-                                    notif_req.reportData.push_back(std::move(report_data));
+                                    report_data_items.push_back(std::move(report_data));
                                 }
                             }
                         }
@@ -375,10 +472,32 @@ bool DefaultChargePointEventsHandler::onGetBaseReport(const ocpp::messages::ocpp
 
                 std::this_thread::sleep_for(std::chrono::seconds(1));
 
-                NotifyReportConf notif_conf;
-                std::string      error;
-                std::string      error_msg;
-                m_chargepoint->call(notif_req, notif_conf, error, error_msg);
+                int seq_no = 0;
+                for (size_t offset = 0; offset < report_data_items.size(); offset += max_report_data_per_message)
+                {
+                    const size_t remaining = report_data_items.size() - offset;
+                    const size_t count     = (remaining < max_report_data_per_message) ? remaining : max_report_data_per_message;
+                    const size_t end       = offset + count;
+
+                    NotifyReportReq notif_req;
+                    notif_req.requestId   = req_id;
+                    notif_req.generatedAt = DateTime::now();
+                    notif_req.seqNo       = seq_no++;
+                    notif_req.tbc         = (end < report_data_items.size());
+
+                    for (size_t index = offset; index < end; ++index)
+                    {
+                        notif_req.reportData.push_back(std::move(report_data_items[index]));
+                    }
+
+                    NotifyReportConf notif_conf;
+                    std::string      error;
+                    std::string      error_msg;
+                    if (!m_chargepoint->getNotifyManager().notifyReport(notif_req, notif_conf, error, error_msg))
+                    {
+                        break;
+                    }
+                }
             });
         report_thread.detach();
     }

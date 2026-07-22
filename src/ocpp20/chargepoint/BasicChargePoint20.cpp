@@ -250,6 +250,8 @@ bool BasicChargePoint20::start(ocpp::types::ocpp20::BootReasonEnumType boot_reas
                                                                *m_timer_pool,
                                                                *m_worker_pool,
                                                                m_connectors,
+                                                               *m_msg_dispatcher,
+                                                               *m_messages_converter,
                                                                *m_msg_sender,
                                                                *m_trigger_manager,
                                                                boot_reason);
