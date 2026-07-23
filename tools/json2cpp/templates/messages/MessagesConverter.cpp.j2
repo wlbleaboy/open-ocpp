@@ -16,7 +16,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with OpenOCPP. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "MessagesConverter20.h"
+#include "MessagesConverter{{ocpp_version_suffix}}.h"
 
 {%- for msg_name in csms_msgs %}
 #include "{{msg_name}}{{ocpp_version_suffix}}.h"
@@ -39,11 +39,11 @@ namespace ocpp
 {
 namespace messages
 {
-namespace ocpp20
+namespace {{ocpp_version_namespace}}
 {
 
 /** @brief Constructor */
-MessagesConverter20::MessagesConverter20()
+MessagesConverter{{ocpp_version_suffix}}::MessagesConverter{{ocpp_version_suffix}}()
 {
     // Register converters
     {%- for msg_name in csms_msgs %}
@@ -54,7 +54,7 @@ MessagesConverter20::MessagesConverter20()
     {%- endfor %}
 }
 /** @brief Destructor */
-MessagesConverter20::~MessagesConverter20()
+MessagesConverter{{ocpp_version_suffix}}::~MessagesConverter{{ocpp_version_suffix}}()
 {
     // Free memory
     {%- for msg_name in csms_msgs %}
@@ -65,6 +65,6 @@ MessagesConverter20::~MessagesConverter20()
     {%- endfor %}
 }
 
-} // namespace ocpp20
+} // namespace {{ocpp_version_namespace}}
 } // namespace messages
 } // namespace ocpp

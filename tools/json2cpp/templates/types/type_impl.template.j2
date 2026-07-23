@@ -86,7 +86,15 @@ bool {{type.name}}Converter::fromJson(const rapidjson::Value&       json,
         for (auto it = {{field.name}}_json.Begin(); ret && (it != {{field.name}}_json.End()); ++it)
         {
             {{field.get_cpp_type(field.array_type, "")}}& item = data.{{field.name}}.emplace_back();
+            {%- if field.array_type == "string" %}
+            item = it->GetString();
+            {%- elif field.array_type == "number" %}
+            item = it->GetFloat();
+            {%- elif field.array_type == "boolean" %}
+            item = it->GetBool();
+            {%- else %}
             item = it->GetInt();
+            {%- endif %}
         }
         {%- endif %}
     }
@@ -166,7 +174,11 @@ bool {{type.name}}Converter::toJson(const {{type.name}}& data, rapidjson::Docume
         {%- else %}
         for (const {{field.get_cpp_type(field.array_type, "")}}& item : data.{{field.name}})
         {
+            {%- if field.array_type == "string" %}
+            {{field.name}}_json.PushBack(rapidjson::Value(item.c_str(), *allocator).Move(), *allocator);
+            {%- else %}
             {{field.name}}_json.PushBack(rapidjson::Value(item), *allocator);
+            {%- endif %}
         }
         {%- endif %}
         json.AddMember(rapidjson::StringRef("{{field.name}}"), {{field.name}}_json.Move(), *allocator);

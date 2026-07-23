@@ -86,12 +86,15 @@ if(${BUILD_STATIC_LIBRARY})
         centralsystem20
         chargepoint20
         localcontroller20
+        chargepoint21
         config
         database
         messages
         messages16
         messages20
+        messages21
         types20
+        types21
         rpc
         helpers
         log
@@ -116,12 +119,15 @@ if (${BUILD_SHARED_LIBRARY})
         centralsystem20
         chargepoint20
         localcontroller20
+        chargepoint21
         config
         database
         messages
         messages16
         messages20
+        messages21
         types20
+        types21
         rpc
         helpers
         log
@@ -160,6 +166,8 @@ file(GLOB OCPP16_SCHEMAS
      LIST_DIRECTORIES false RELATIVE ${CMAKE_SOURCE_DIR} "${CMAKE_SOURCE_DIR}/schemas/ocpp16/*.json")
 file(GLOB OCPP20_SCHEMAS
      LIST_DIRECTORIES false RELATIVE ${CMAKE_SOURCE_DIR} "${CMAKE_SOURCE_DIR}/schemas/ocpp20/*.json")
+file(GLOB OCPP21_SCHEMAS
+     LIST_DIRECTORIES false RELATIVE ${CMAKE_SOURCE_DIR} "${CMAKE_SOURCE_DIR}/schemas/ocpp21/*.json")
 
 install(TARGETS ${OPEN_OCPP_SHARED_TARGET} ${OPEN_OCPP_STATIC_TARGET}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -169,6 +177,7 @@ install(TARGETS ${OPEN_OCPP_SHARED_TARGET} ${OPEN_OCPP_STATIC_TARGET}
 install(FILES ${PUBLIC_HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openocpp)
 install(FILES ${OCPP16_SCHEMAS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openocpp/schemas/ocpp16)
 install(FILES ${OCPP20_SCHEMAS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openocpp/schemas/ocpp20)
+install(FILES ${OCPP21_SCHEMAS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openocpp/schemas/ocpp21)
 
 if(${INSTALL_RAPID_JSON})
     file(GLOB RAPIDJSON_HEADERS
