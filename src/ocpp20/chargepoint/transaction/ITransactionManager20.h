@@ -75,6 +75,12 @@ class ITransactionManager20
                                    ocpp::types::ocpp20::TriggerReasonEnumType                 trigger_reason,
                                    const std::vector<ocpp::types::ocpp20::MeterValueType>&    meter_values) = 0;
 
+    /** @brief Check if a transaction is active */
+    virtual bool hasActiveTransaction(const std::string& transaction_id) = 0;
+
+    /** @brief Check if a transaction is active on an EVSE connector */
+    virtual bool hasActiveTransaction(unsigned int evse_id, unsigned int connector_id) = 0;
+
     /** @brief Stop a transaction */
     virtual bool stopTransaction(const std::string&                         transaction_id,
                                  ocpp::types::ocpp20::ReasonEnumType       reason,

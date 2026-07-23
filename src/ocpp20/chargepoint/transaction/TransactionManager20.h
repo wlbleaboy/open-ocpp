@@ -119,6 +119,10 @@ class TransactionManager20
                            ocpp::types::ocpp20::TriggerReasonEnumType              trigger_reason,
                            const std::vector<ocpp::types::ocpp20::MeterValueType>& meter_values) override;
 
+    bool hasActiveTransaction(const std::string& transaction_id) override;
+
+    bool hasActiveTransaction(unsigned int evse_id, unsigned int connector_id) override;
+
     bool stopTransaction(const std::string&                                      transaction_id,
                          ocpp::types::ocpp20::ReasonEnumType                    reason,
                          ocpp::types::ocpp20::TriggerReasonEnumType             trigger_reason,

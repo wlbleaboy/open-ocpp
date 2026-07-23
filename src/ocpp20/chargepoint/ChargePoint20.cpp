@@ -576,6 +576,17 @@ bool ChargePoint20::updateTransaction(const std::string&                        
     return ret;
 }
 
+/** @copydoc bool IChargePoint20::hasActiveTransaction(const std::string&) */
+bool ChargePoint20::hasActiveTransaction(const std::string& transaction_id)
+{
+    bool ret = false;
+    if (m_transaction_manager)
+    {
+        ret = m_transaction_manager->hasActiveTransaction(transaction_id);
+    }
+    return ret;
+}
+
 /** @copydoc bool IChargePoint20::stopTransaction(const std::string&,
  *                                                ocpp::types::ocpp20::ReasonEnumType,
  *                                                ocpp::types::ocpp20::TriggerReasonEnumType,

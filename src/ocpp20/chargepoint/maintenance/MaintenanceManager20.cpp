@@ -55,7 +55,10 @@ MaintenanceManager20::MaintenanceManager20(IChargePointEventsHandler20&         
       GenericMessageHandler<UpdateFirmwareReq, UpdateFirmwareConf>(UPDATEFIRMWARE_ACTION, messages_converter),
       m_events_handler(events_handler),
       m_msg_sender(msg_sender),
-      m_worker_pool(worker_pool)
+      m_worker_pool(worker_pool),
+      m_firmware_thread(nullptr),
+      m_firmware_status(FirmwareStatusEnumType::Idle),
+      m_firmware_request_id()
 {
     msg_dispatcher.registerHandler(GETLOG_ACTION, *dynamic_cast<GenericMessageHandler<GetLogReq, GetLogConf>*>(this));
     msg_dispatcher.registerHandler(PUBLISHFIRMWARE_ACTION,
@@ -81,9 +84,21 @@ MaintenanceManager20::~MaintenanceManager20() { }
 /** @brief Notify firmware update status */
 bool MaintenanceManager20::notifyFirmwareUpdateStatus(FirmwareStatusEnumType status, const Optional<int>& request_id)
 {
+    m_firmware_status = status;
+    if (request_id.isSet())
+    {
+        m_firmware_request_id = request_id;
+    }
+    else if (status == FirmwareStatusEnumType::Idle)
+    {
+        m_firmware_request_id.clear();
+    }
+
+    LOG_INFO << "FirmwareUpdate status : " << FirmwareStatusEnumTypeHelper.toString(m_firmware_status);
+
     FirmwareStatusNotificationReq request;
-    request.status = status;
-    request.requestId = request_id;
+    request.status    = m_firmware_status;
+    request.requestId = m_firmware_request_id;
 
     FirmwareStatusNotificationConf response;
     CallResult result = m_msg_sender.call(FIRMWARESTATUSNOTIFICATION_ACTION, request, response);
@@ -144,8 +159,7 @@ bool MaintenanceManager20::onTriggerMessage(MessageTriggerEnumType message, cons
                 [this]
                 {
                     std::this_thread::sleep_for(std::chrono::milliseconds(250u));
-                    Optional<int> request_id;
-                    notifyFirmwareUpdateStatus(FirmwareStatusEnumType::Idle, request_id);
+                    notifyFirmwareUpdateStatus(m_firmware_status, m_firmware_request_id);
                 });
         }
         break;
@@ -239,8 +253,127 @@ bool MaintenanceManager20::handleMessage(const UpdateFirmwareReq& request,
                                          std::string&             error_message)
 {
     LOG_INFO << "UpdateFirmware request received : requestId = " << request.requestId
-             << " - location = " << request.firmware.location.str();
-    return m_events_handler.onUpdateFirmware(request, response, error_code, error_message);
+             << " - location = " << request.firmware.location.str()
+             << " - retrieveDate = " << request.firmware.retrieveDateTime.str();
+
+    std::string local_firmware_file;
+    bool        ret = m_events_handler.onUpdateFirmware(request, response, error_code, error_message, local_firmware_file);
+    if (ret && (response.status == UpdateFirmwareStatusEnumType::Accepted))
+    {
+        if (local_firmware_file.empty())
+        {
+            LOG_ERROR << "Firmware update rejected : no local firmware file provided";
+            response.status = UpdateFirmwareStatusEnumType::Rejected;
+        }
+        else if (!m_firmware_thread)
+        {
+            m_firmware_thread = new std::thread([this, request, local_firmware_file]
+                                                {
+                                                    processUpdateFirmware(request.firmware.location.str(),
+                                                                          local_firmware_file,
+                                                                          request.retries,
+                                                                          request.retryInterval,
+                                                                          request.firmware.retrieveDateTime,
+                                                                          request.firmware.installDateTime,
+                                                                          request.requestId);
+                                                });
+            m_firmware_thread->detach();
+        }
+        else
+        {
+            LOG_ERROR << "Firmware update already in progress";
+            response.status = UpdateFirmwareStatusEnumType::Rejected;
+        }
+    }
+    return ret;
+}
+
+void MaintenanceManager20::processUpdateFirmware(std::string           location,
+                                                 std::string           local_firmware_file,
+                                                 Optional<int>         retries,
+                                                 Optional<int>         retry_interval,
+                                                 DateTime              retrieve_date,
+                                                 Optional<DateTime>    install_date,
+                                                 int                   request_id)
+{
+    Optional<int> firmware_request_id;
+    firmware_request_id = request_id;
+
+    LOG_INFO << "UpdateFirmware : Waiting until retrieve date (" << retrieve_date.timestamp() << ") from now (" << DateTime::now()
+             << ")";
+    notifyFirmwareUpdateStatus(FirmwareStatusEnumType::DownloadScheduled, firmware_request_id);
+
+    if (retrieve_date > DateTime::now())
+    {
+        std::this_thread::sleep_until(std::chrono::system_clock::from_time_t(retrieve_date.timestamp()));
+    }
+
+    LOG_INFO << "UpdateFirmware download started : location = " << location;
+    notifyFirmwareUpdateStatus(FirmwareStatusEnumType::Downloading, firmware_request_id);
+
+    unsigned int nb_retries = 1u;
+    if (retries.isSet() && (retries.value() > 0))
+    {
+        nb_retries = static_cast<unsigned int>(retries.value());
+    }
+    std::chrono::seconds retry_interval_s(1u);
+    if (retry_interval.isSet() && (retry_interval.value() > 0))
+    {
+        retry_interval_s = std::chrono::seconds(retry_interval.value());
+    }
+
+    bool success = false;
+    do
+    {
+        success = m_events_handler.downloadFile(location, local_firmware_file);
+        if (!success && (nb_retries > 0u))
+        {
+            --nb_retries;
+            if (nb_retries != 0u)
+            {
+                LOG_WARNING << "FirmwareUpdate : download failed (" << nb_retries << " retrie(s) left - next retry in "
+                            << retry_interval_s.count() << "s)";
+                std::this_thread::sleep_for(retry_interval_s);
+            }
+            else
+            {
+                LOG_WARNING << "FirmwareUpdate : download failed no retries left";
+            }
+        }
+    } while (!success && (nb_retries != 0u));
+
+    if (success)
+    {
+        LOG_INFO << "FirmwareUpdate download : success";
+        notifyFirmwareUpdateStatus(FirmwareStatusEnumType::Downloaded, firmware_request_id);
+    }
+    else
+    {
+        LOG_ERROR << "FirmwareUpdate download : failed";
+        notifyFirmwareUpdateStatus(FirmwareStatusEnumType::DownloadFailed, firmware_request_id);
+        m_firmware_status = FirmwareStatusEnumType::Idle;
+        delete m_firmware_thread;
+        m_firmware_thread = nullptr;
+        return;
+    }
+
+    if (install_date.isSet())
+    {
+        LOG_INFO << "UpdateFirmware : Waiting until install date (" << install_date.value().timestamp() << ") from now ("
+                 << DateTime::now() << ")";
+        notifyFirmwareUpdateStatus(FirmwareStatusEnumType::InstallScheduled, firmware_request_id);
+        if (install_date.value() > DateTime::now())
+        {
+            std::this_thread::sleep_until(std::chrono::system_clock::from_time_t(install_date.value().timestamp()));
+        }
+    }
+
+    notifyFirmwareUpdateStatus(FirmwareStatusEnumType::Installing, firmware_request_id);
+    m_events_handler.installFirmware(local_firmware_file);
+    notifyFirmwareUpdateStatus(FirmwareStatusEnumType::Installed, firmware_request_id);
+
+    delete m_firmware_thread;
+    m_firmware_thread = nullptr;
 }
 
 } // namespace ocpp20

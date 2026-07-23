@@ -193,91 +193,91 @@ int main(int argc, char* argv[])
         }
     }
 
-    while (true)
-    {
-        // Wait to be connected to the Central System
-        std::cout << "Waiting connection to Central System..." << std::endl;
-        while (!event_handler.isConnected())
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100u));
-        }
-        std::cout << "Connected to Central System!" << std::endl;
+    // while (true)
+    // {
+    //     // Wait to be connected to the Central System
+    //     std::cout << "Waiting connection to Central System..." << std::endl;
+    //     while (!event_handler.isConnected())
+    //     {
+    //         std::this_thread::sleep_for(std::chrono::milliseconds(100u));
+    //     }
+    //     std::cout << "Connected to Central System!" << std::endl;
 
-        // Wait to be accepted by Central System
-        std::cout << "Waiting registration to Central System..." << std::endl;
-        while (event_handler.isConnected() && !event_handler.isRegistered())
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100u));
-        }
-        if (!event_handler.isConnected())
-        {
-            std::cout << "Disconnected from Central System before registration" << std::endl;
-            continue;
-        }
-        std::cout << "Registered to Central System!" << std::endl;
+    //     // Wait to be accepted by Central System
+    //     std::cout << "Waiting registration to Central System..." << std::endl;
+    //     while (event_handler.isConnected() && !event_handler.isRegistered())
+    //     {
+    //         std::this_thread::sleep_for(std::chrono::milliseconds(100u));
+    //     }
+    //     if (!event_handler.isConnected())
+    //     {
+    //         std::cout << "Disconnected from Central System before registration" << std::endl;
+    //         continue;
+    //     }
+    //     std::cout << "Registered to Central System!" << std::endl;
 
-        // Enable station-level periodic MeterValues
-        charge_point->startPeriodicMeterValues(1u, std::chrono::seconds(30u));
+    //     // Enable station-level periodic MeterValues
+    //     charge_point->startPeriodicMeterValues(1u, std::chrono::seconds(30u));
 
-        // Test loop
-        while (event_handler.isConnected())
-        {
-            for (unsigned int evse_id = 1u; evse_id <= 2u; evse_id++)
-            {
-                for (unsigned int connector_id = 1u; connector_id <= 3u; connector_id++)
-                {
-                    IdTokenType id_token;
-                    id_token.idToken.assign(id_tag);
-                    id_token.type = IdTokenEnumType::ISO14443;
+    //     // Test loop
+    //     while (event_handler.isConnected())
+    //     {
+    //         for (unsigned int evse_id = 1u; evse_id <= 2u; evse_id++)
+    //         {
+    //             for (unsigned int connector_id = 1u; connector_id <= 3u; connector_id++)
+    //             {
+    //                 IdTokenType id_token;
+    //                 id_token.idToken.assign(id_tag);
+    //                 id_token.type = IdTokenEnumType::ISO14443;
 
-                    std::cout << "Starting transaction on EVSE " << evse_id << ", connector " << connector_id << "..." << std::endl;
+    //                 std::cout << "Starting transaction on EVSE " << evse_id << ", connector " << connector_id << "..." << std::endl;
 
-                    charge_point->statusNotification(evse_id, connector_id, ConnectorStatusEnumType::Occupied);
-                    std::this_thread::sleep_for(std::chrono::seconds(1u));
+    //                 charge_point->statusNotification(evse_id, connector_id, ConnectorStatusEnumType::Occupied);
+    //                 std::this_thread::sleep_for(std::chrono::seconds(1u));
 
-                    std::string transaction_id;
-                    if (charge_point->startTransaction(evse_id, connector_id, id_token, TriggerReasonEnumType::Authorized, transaction_id))
-                    {
-                        std::cout << "Transaction started : " << transaction_id << std::endl;
+    //                 std::string transaction_id;
+    //                 if (charge_point->startTransaction(evse_id, connector_id, id_token, TriggerReasonEnumType::Authorized, transaction_id))
+    //                 {
+    //                     std::cout << "Transaction started : " << transaction_id << std::endl;
 
-                        charge_point->updateTransaction(transaction_id, TriggerReasonEnumType::CablePluggedIn, {});
-                        std::this_thread::sleep_for(std::chrono::seconds(30u));
+    //                     charge_point->updateTransaction(transaction_id, TriggerReasonEnumType::CablePluggedIn, {});
+    //                     std::this_thread::sleep_for(std::chrono::seconds(30u));
 
-                        if (charge_point->stopTransaction(transaction_id, ReasonEnumType::Local, TriggerReasonEnumType::StopAuthorized, &id_token, {}))
-                        {
-                            std::cout << "Transaction stopped : " << transaction_id << std::endl;
-                        }
-                        else
-                        {
-                            std::cout << "Unable to stop transaction : " << transaction_id << std::endl;
-                        }
-                    }
-                    else
-                    {
-                        std::cout << "Transaction rejected or delayed before start" << std::endl;
-                    }
+    //                     if (charge_point->stopTransaction(transaction_id, ReasonEnumType::Local, TriggerReasonEnumType::StopAuthorized, &id_token, {}))
+    //                     {
+    //                         std::cout << "Transaction stopped : " << transaction_id << std::endl;
+    //                     }
+    //                     else
+    //                     {
+    //                         std::cout << "Unable to stop transaction : " << transaction_id << std::endl;
+    //                     }
+    //                 }
+    //                 else
+    //                 {
+    //                     std::cout << "Transaction rejected or delayed before start" << std::endl;
+    //                 }
 
-                    charge_point->statusNotification(evse_id, connector_id, ConnectorStatusEnumType::Available);
+    //                 charge_point->statusNotification(evse_id, connector_id, ConnectorStatusEnumType::Available);
 
-                    if (event_handler.isConnected())
-                    {
-                        std::this_thread::sleep_for(std::chrono::seconds(10u));
-                    }
-                    else
-                    {
-                        std::cout << "Disconnected from Central System, stop test loop" << std::endl;
-                        break;
-                    }
-                }
-            }
+    //                 if (event_handler.isConnected())
+    //                 {
+    //                     std::this_thread::sleep_for(std::chrono::seconds(10u));
+    //                 }
+    //                 else
+    //                 {
+    //                     std::cout << "Disconnected from Central System, stop test loop" << std::endl;
+    //                     break;
+    //                 }
+    //             }
+    //         }
 
-            std::cout << "Test loop ended, wait before next cycle..." << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(5u));
-        }
+    //         std::cout << "Test loop ended, wait before next cycle..." << std::endl;
+    //         std::this_thread::sleep_for(std::chrono::seconds(5u));
+    //     }
 
-        charge_point->stopPeriodicMeterValues(1u);
-        std::cout << "Disconnected from Central System, wait for reconnection..." << std::endl;
-    }
+    //     charge_point->stopPeriodicMeterValues(1u);
+    //     std::cout << "Disconnected from Central System, wait for reconnection..." << std::endl;
+    // }
 
     return 0;
 }

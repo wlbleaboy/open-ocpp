@@ -47,8 +47,17 @@ class ChargePointDemoConfig
                              const ocpp::types::ocpp20::VariableType&  variable,
                              std::string&                              value)
     {
-        auto ini_value = m_config.get(buildComponentName(component), buildVariableName(variable));
-        value          = ini_value.toString();
+        const std::string variable_name = buildVariableName(variable);
+        const std::string component_name = buildComponentName(component);
+        value = m_config.get(component_name, variable_name).toString();
+        if (value.empty())
+        {
+            const std::string legacy_component_name = buildLegacyComponentName(component);
+            if (legacy_component_name != component_name)
+            {
+                value = m_config.get(legacy_component_name, variable_name).toString();
+            }
+        }
         return true;
     }
 
@@ -89,6 +98,38 @@ class ChargePointDemoConfig
             }
         }
         return name;
+    }
+
+    std::string buildLegacyComponentName(const ocpp::types::ocpp20::ComponentType& component)
+    {
+        std::string name = component.name;
+        if (component.instance.isSet())
+        {
+            name += "." + legacyInstanceName(component.instance.value().str());
+        }
+        if (component.evse.isSet())
+        {
+            name += "." + std::to_string(component.evse.value().id);
+            if (component.evse.value().connectorId.isSet())
+            {
+                name += "." + std::to_string(component.evse.value().connectorId.value());
+            }
+        }
+        return name;
+    }
+
+    std::string legacyInstanceName(const std::string& instance)
+    {
+        size_t digits_pos = instance.size();
+        while ((digits_pos > 0u) && (instance[digits_pos - 1u] >= '0') && (instance[digits_pos - 1u] <= '9'))
+        {
+            --digits_pos;
+        }
+        if ((digits_pos > 0u) && (digits_pos < instance.size()) && (instance[digits_pos - 1u] != ' '))
+        {
+            return instance.substr(0u, digits_pos) + " " + instance.substr(digits_pos);
+        }
+        return instance;
     }
 
     /** @brief Build the device model variable unique name */

@@ -345,7 +345,14 @@ class DefaultChargePointEventsHandler : public ocpp::chargepoint::ocpp20::ICharg
     bool onUpdateFirmware(const ocpp::messages::ocpp20::UpdateFirmwareReq& request,
                           ocpp::messages::ocpp20::UpdateFirmwareConf&      response,
                           std::string&                                     error,
-                          std::string&                                     message) override;
+                          std::string&                                     message,
+                          std::string&                                     local_firmware_file) override;
+
+    /** @copydoc IChargePointEventsHandler20::downloadFile(const std::string&, const std::string&) */
+    bool downloadFile(const std::string& url, const std::string& file) override;
+
+    /** @copydoc IChargePointEventsHandler20::installFirmware(const std::string&) */
+    void installFirmware(const std::string& firmware_file) override;
 
   protected:
     /** @brief Get the configuration */

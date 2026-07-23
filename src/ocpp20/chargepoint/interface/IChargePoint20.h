@@ -231,6 +231,13 @@ class IChargePoint20
                                    const std::vector<ocpp::types::ocpp20::MeterValueType>& meter_values) = 0;
 
     /**
+     * @brief Check if a transaction is active
+     * @param transaction_id Transaction id
+     * @return true if the transaction is active, false otherwise
+     */
+    virtual bool hasActiveTransaction(const std::string& transaction_id) = 0;
+
+    /**
      * @brief Stop a transaction and send the corresponding TransactionEvent
      * @param transaction_id Transaction id
      * @param reason Stop reason

@@ -123,6 +123,11 @@ bool ChargerManager20::remoteStopTransactionRequested(const std::string& transac
     {
         return false;
     }
+    if (transaction_id.empty() || !charge_point->hasActiveTransaction(transaction_id))
+    {
+        std::cout << "[ChargerManager20] reject remote stop for unknown transaction: " << transaction_id << std::endl;
+        return false;
+    }
 
     charge_point->getWorkerPool().run<void>([this, transaction_id] { stopRemoteTransaction(transaction_id); });
     return true;
@@ -153,6 +158,14 @@ void ChargerManager20::sendLocalList(std::vector<std::string> localList)
 UnlockStatusEnumType ChargerManager20::unlockConnectorRequested(unsigned int evse_id, unsigned int connector_id)
 {
     std::cout << "[ChargerManager20] unlockConnectorRequested: evse=" << evse_id << " connector=" << connector_id << std::endl;
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (const auto& transaction : m_transactions)
+    {
+        if ((transaction.second.evse_id == evse_id) && (transaction.second.connector_id == connector_id))
+        {
+            return UnlockStatusEnumType::OngoingAuthorizedTransaction;
+        }
+    }
     return UnlockStatusEnumType::Unlocked;
 }
 

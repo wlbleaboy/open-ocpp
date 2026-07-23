@@ -542,31 +542,41 @@ std::string ChargePointEventsHandler::getDiagnostics(const Optional<DateTime>& s
     return diag_file;
 }
 
-/** @copydoc std::string IChargePointEventsHandler::updateFirmwareRequested() */
-std::string ChargePointEventsHandler::updateFirmwareRequested()
+/** @copydoc IChargePointEventsHandler20::onUpdateFirmware(...) */
+bool ChargePointEventsHandler::onUpdateFirmware(const ocpp::messages::ocpp20::UpdateFirmwareReq& request,
+                                                ocpp::messages::ocpp20::UpdateFirmwareConf&      response,
+                                                std::string&                                     error,
+                                                std::string&                                     message,
+                                                std::string&                                     local_firmware_file)
 {
-    zlog_debug(gZlog, "Firmware update requested");
+    (void)error;
+    (void)message;
 
-    if (access(TEMP_DIR, F_OK) != 0) {
-        if (mkdir(TEMP_DIR, DIR_PERM) != 0) {
+    zlog_debug(gZlog, "Firmware update requested, requestId=%d, location=%s", request.requestId, request.firmware.location.str().c_str());
+    if (access(TEMP_DIR, F_OK) != 0)
+    {
+        if (mkdir(TEMP_DIR, DIR_PERM) != 0)
+        {
             zlog_error(gZlog, "create %s failed", TEMP_DIR);
-            return string("");            
+            response.status = ocpp::types::ocpp20::UpdateFirmwareStatusEnumType::Rejected;
+            return true;
         }
     }
 
-    std::string filename = string(TEMP_DIR) + "/firmware.zip";
-
-    return filename;
+    local_firmware_file = string(TEMP_DIR) + "/firmware.zip";
+    response.status = ocpp::types::ocpp20::UpdateFirmwareStatusEnumType::Accepted;
+    return true;
 }
 
-/** @copydoc void IChargePointEventsHandler::installFirmware() */
+/** @copydoc IChargePointEventsHandler20::installFirmware(const std::string&) */
 void ChargePointEventsHandler::installFirmware(const std::string& firmware_file)
-{   
-    if(m_chargerManager)
+{
+    if (m_chargerManager)
     {
         m_chargerManager->installFirmware(firmware_file);
     }
-    else{
+    else
+    {
         zlog_error(gZlog, "m_chargerManager is null");
     }
 }

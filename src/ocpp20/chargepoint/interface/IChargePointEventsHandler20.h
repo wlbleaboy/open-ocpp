@@ -659,12 +659,26 @@ class IChargePointEventsHandler20
       * @param response Response to send
       * @param error Error (Empty if not a CallError)
       * @param message Error message (Empty if not a CallError)
-      * @return true if the request has been sent and a response has been received, false otherwise
+      * @param local_firmware_file Path where the firmware shall be downloaded if the request is accepted
+      * @return true if the request has been handled, false otherwise
       */
     virtual bool onUpdateFirmware(const ocpp::messages::ocpp20::UpdateFirmwareReq& request,
                                   ocpp::messages::ocpp20::UpdateFirmwareConf&      response,
                                   std::string&                                     error,
-                                  std::string&                                     message) = 0;
+                                  std::string&                                     message,
+                                  std::string&                                     local_firmware_file) = 0;
+    /**
+     * @brief Called to download a file from a given URL
+     * @param url URL from where to download the file
+     * @param file Path where to save the file
+     * @return true if the file has been downloaded, false otherwise
+     */
+    virtual bool downloadFile(const std::string& url, const std::string& file) = 0;
+    /**
+     * @brief Called when a firmware is ready to be installed
+     * @param firmware_file Path to the firmware file to install
+     */
+    virtual void installFirmware(const std::string& firmware_file) = 0;
 };
 
 } // namespace ocpp20

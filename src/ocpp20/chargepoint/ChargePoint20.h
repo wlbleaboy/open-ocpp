@@ -184,6 +184,9 @@ class ChargePoint20
                            ocpp::types::ocpp20::TriggerReasonEnumType              trigger_reason,
                            const std::vector<ocpp::types::ocpp20::MeterValueType>& meter_values) override;
 
+    /** @copydoc bool IChargePoint20::hasActiveTransaction(const std::string&) */
+    bool hasActiveTransaction(const std::string& transaction_id) override;
+
     /** @copydoc bool IChargePoint20::stopTransaction(const std::string&,
      *                                                ocpp::types::ocpp20::ReasonEnumType,
      *                                                ocpp::types::ocpp20::TriggerReasonEnumType,

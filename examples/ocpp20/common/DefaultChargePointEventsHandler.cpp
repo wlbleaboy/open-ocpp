@@ -24,11 +24,14 @@ SOFTWARE.
 
 #include "DefaultChargePointEventsHandler.h"
 #include "ChargePointDemoConfig.h"
+#include "ITransactionManager20.h"
 #include "NotifyReport20.h"
 #include "Ocpp20MeterValueProvider.h"
+#include "StringHelpers.h"
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <thread>
 
 // With MSVC compiler, the system() call returns directly the command's return value
@@ -989,13 +992,24 @@ bool DefaultChargePointEventsHandler::onUnlockConnector(const ocpp::messages::oc
 {
     bool ret = true;
 
-    (void)request;
     (void)error;
     (void)message;
 
-    cout << "UnlockConnector" << endl;
+    cout << "UnlockConnector : evseId = " << request.evseId << " - connectorId = " << request.connectorId << endl;
 
-    response.status = UnlockStatusEnumType::UnknownConnector;
+    if ((request.evseId <= 0) || (request.connectorId <= 0))
+    {
+        response.status = UnlockStatusEnumType::UnknownConnector;
+    }
+    else if (m_chargepoint && m_chargepoint->getTransactionManager().hasActiveTransaction(
+                                 static_cast<unsigned int>(request.evseId), static_cast<unsigned int>(request.connectorId)))
+    {
+        response.status = UnlockStatusEnumType::OngoingAuthorizedTransaction;
+    }
+    else
+    {
+        response.status = UnlockStatusEnumType::Unlocked;
+    }
 
     return ret;
 }
@@ -1023,17 +1037,74 @@ bool DefaultChargePointEventsHandler::onUnpublishFirmware(const ocpp::messages::
 bool DefaultChargePointEventsHandler::onUpdateFirmware(const ocpp::messages::ocpp20::UpdateFirmwareReq& request,
                                                        ocpp::messages::ocpp20::UpdateFirmwareConf&      response,
                                                        std::string&                                     error,
-                                                       std::string&                                     message)
+                                                       std::string&                                     message,
+                                                       std::string&                                     local_firmware_file)
 {
     bool ret = true;
 
-    (void)request;
     (void)error;
     (void)message;
 
-    cout << "UpdateFirmware" << endl;
+    cout << "UpdateFirmware : requestId = " << request.requestId << " - location = " << request.firmware.location.str() << endl;
 
-    response.status = UpdateFirmwareStatusEnumType::Rejected;
+    try
+    {
+        const std::filesystem::path firmware_dir =
+            m_working_dir.empty() ? std::filesystem::temp_directory_path() : m_working_dir;
+        std::filesystem::create_directories(firmware_dir);
+        local_firmware_file = (firmware_dir / "firmware.bin").string();
+        response.status     = UpdateFirmwareStatusEnumType::Accepted;
+    }
+    catch (const std::filesystem::filesystem_error& e)
+    {
+        cout << "Unable to prepare firmware download directory : " << e.what() << endl;
+        response.status = UpdateFirmwareStatusEnumType::Rejected;
+    }
 
     return ret;
+}
+
+/** @copydoc IChargePointEventsHandler20::downloadFile(const std::string&, const std::string&) */
+bool DefaultChargePointEventsHandler::downloadFile(const std::string& url, const std::string& file)
+{
+    bool ret = true;
+    cout << "Downloading from " << url << " to " << file << endl;
+
+    std::string connection_url = url;
+    std::string params;
+    if (connection_url.find("ftp://") == 0)
+    {
+    }
+    else if (connection_url.find("ftps://") == 0)
+    {
+        params = "--insecure --ssl";
+        ocpp::helpers::replace(connection_url, "ftps://", "ftp://", false);
+    }
+    else if (connection_url.find("http://") == 0)
+    {
+    }
+    else if (connection_url.find("https://") == 0)
+    {
+        params = "--insecure";
+    }
+    else
+    {
+        ret = false;
+    }
+    if (ret)
+    {
+        std::stringstream ss;
+        ss << "curl --silent " << params << " -o " << file << " " << connection_url;
+        int sys_ret = system(ss.str().c_str());
+        int err     = WEXITSTATUS(sys_ret);
+        cout << "Command line : " << ss.str() << endl;
+        ret = (err == 0);
+    }
+    return ret;
+}
+
+/** @copydoc IChargePointEventsHandler20::installFirmware(const std::string&) */
+void DefaultChargePointEventsHandler::installFirmware(const std::string& firmware_file)
+{
+    cout << "Firmware to install : " << firmware_file << endl;
 }

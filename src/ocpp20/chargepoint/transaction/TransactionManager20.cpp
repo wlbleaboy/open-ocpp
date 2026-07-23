@@ -201,6 +201,29 @@ bool TransactionManager20::updateTransaction(const std::string& transaction_id,
     return ret;
 }
 
+/** @brief Check if a transaction is active */
+bool TransactionManager20::hasActiveTransaction(const std::string& transaction_id)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto                        transaction = m_transactions.find(transaction_id);
+    return (transaction != m_transactions.end()) && transaction->second.active;
+}
+
+/** @brief Check if a transaction is active on an EVSE connector */
+bool TransactionManager20::hasActiveTransaction(unsigned int evse_id, unsigned int connector_id)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (const auto& transaction : m_transactions)
+    {
+        if (transaction.second.active && (transaction.second.evse_id == evse_id) &&
+            (transaction.second.connector_id == connector_id))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** @brief Stop a transaction */
 bool TransactionManager20::stopTransaction(const std::string& transaction_id,
                                            ReasonEnumType reason,
@@ -231,6 +254,10 @@ bool TransactionManager20::stopTransaction(const std::string& transaction_id,
             saveTransaction(transaction->second);
             m_transactions.erase(transaction);
         }
+    }
+    else
+    {
+        LOG_WARNING << "Unable to stop unknown or inactive transaction [" << transaction_id << "]";
     }
 
     return ret;

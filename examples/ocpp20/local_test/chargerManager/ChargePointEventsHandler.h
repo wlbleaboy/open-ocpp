@@ -102,10 +102,14 @@ class ChargePointEventsHandler : public DefaultChargePointEventsHandler
     std::string getDiagnostics(const Optional<DateTime>& start_time,
                                const Optional<DateTime>& stop_time) override;
 
-    /** @copydoc std::string IChargePointEventsHandler::updateFirmwareRequested() */
-    std::string updateFirmwareRequested() override;
+    /** @copydoc IChargePointEventsHandler20::onUpdateFirmware(...) */
+    bool onUpdateFirmware(const ocpp::messages::ocpp20::UpdateFirmwareReq& request,
+                          ocpp::messages::ocpp20::UpdateFirmwareConf&      response,
+                          std::string&                                     error,
+                          std::string&                                     message,
+                          std::string&                                     local_firmware_file) override;
 
-    /** @copydoc void IChargePointEventsHandler::installFirmware() */
+    /** @copydoc IChargePointEventsHandler20::installFirmware(const std::string&) */
     void installFirmware(const std::string& firmware_file) override;
 
     void setChargerManager(IChargerManager& ChargerManager) { m_chargerManager = &ChargerManager; }

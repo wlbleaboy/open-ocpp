@@ -32,6 +32,7 @@ along with OpenOCPP. If not, see <http://www.gnu.org/licenses/>.
 #include "UnpublishFirmware20.h"
 #include "UpdateFirmware20.h"
 
+#include <thread>
 #include <string>
 #include <vector>
 
@@ -144,6 +145,21 @@ class MaintenanceManager20
     ocpp::messages::GenericMessageSender& m_msg_sender;
     /** @brief Worker thread pool */
     ocpp::helpers::WorkerThreadPool& m_worker_pool;
+    /** @brief Firmware update thread */
+    std::thread* m_firmware_thread;
+    /** @brief Current firmware update status */
+    ocpp::types::ocpp20::FirmwareStatusEnumType m_firmware_status;
+    /** @brief Current firmware update request id */
+    ocpp::types::Optional<int> m_firmware_request_id;
+
+    /** @brief Process a firmware update request */
+    void processUpdateFirmware(std::string                                  location,
+                               std::string                                  local_firmware_file,
+                               ocpp::types::Optional<int>                   retries,
+                               ocpp::types::Optional<int>                   retry_interval,
+                               ocpp::types::DateTime                        retrieve_date,
+                               ocpp::types::Optional<ocpp::types::DateTime> install_date,
+                               int                                          request_id);
 };
 
 } // namespace ocpp20
