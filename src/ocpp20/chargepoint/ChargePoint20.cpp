@@ -169,6 +169,7 @@ ChargePoint20::ChargePoint20(const ocpp::config::IChargePointConfig20&          
       m_messages_validator(),
       m_stop_in_progress(false),
       m_reconnect_scheduled(false),
+      m_rpc_connected(false),
       m_ws_client(),
       m_rpc_client(),
       m_msg_dispatcher(),
@@ -448,6 +449,7 @@ bool ChargePoint20::stop()
     {
         LOG_INFO << "Stopping OCPP stack";
         m_stop_in_progress = true;
+        m_rpc_connected = false;
 
         // Stop uptime counter
         if (!m_stack_config.databasePath().empty())
@@ -510,6 +512,58 @@ bool ChargePoint20::reconnect()
         LOG_ERROR << "Stack stopped";
     }
 
+    return ret;
+}
+
+/** @copydoc bool IChargePoint20::dataTransfer(const std::string&,
+ *                                             const std::string&,
+ *                                             const std::string&,
+ *                                             DataTransferStatusEnumType&,
+ *                                             std::string&,
+ *                                             std::string&,
+ *                                             std::string&)
+ */
+bool ChargePoint20::dataTransfer(const std::string&                               vendor_id,
+                                 const std::string&                               message_id,
+                                 const std::string&                               request_data,
+                                 ocpp::types::ocpp20::DataTransferStatusEnumType& status,
+                                 std::string&                                     response_data,
+                                 std::string&                                     error,
+                                 std::string&                                     message)
+{
+    bool ret = false;
+    if (m_data_transfer_manager)
+    {
+        ret = m_data_transfer_manager->dataTransfer(vendor_id, message_id, request_data, status, response_data, error, message);
+    }
+    else
+    {
+        error = "NotSupported";
+        message = "DataTransfer manager is not available";
+    }
+    return ret;
+}
+
+/** @copydoc bool IChargePoint20::authorize(const ocpp::types::ocpp20::IdTokenType&,
+ *                                          ocpp::types::ocpp20::IdTokenInfoType&,
+ *                                          std::string&,
+ *                                          std::string&)
+ */
+bool ChargePoint20::authorize(const ocpp::types::ocpp20::IdTokenType& id_token,
+                              ocpp::types::ocpp20::IdTokenInfoType&   token_info,
+                              std::string&                            error,
+                              std::string&                            message)
+{
+    bool ret = false;
+    if (m_authent_manager)
+    {
+        ret = m_authent_manager->authorize(id_token, token_info, error, message);
+    }
+    else
+    {
+        error = "NotSupported";
+        message = "Authent manager is not available";
+    }
     return ret;
 }
 
@@ -691,6 +745,12 @@ bool ChargePoint20::getSetpoint(unsigned int                                    
 /** @copydoc void RpcClient::IListener::rpcClientConnected() */
 void ChargePoint20::rpcClientConnected()
 {
+    if (m_rpc_connected.exchange(true))
+    {
+        LOG_DEBUG << "Duplicate connection notification from Central System ignored";
+        return;
+    }
+
     LOG_INFO << "Connected to Central System";
     m_events_handler.connectionStateChanged(true);
     if (m_status_manager)
@@ -706,6 +766,7 @@ void ChargePoint20::rpcClientConnected()
 /** @copydoc void RpcClient::IListener::rpcClientFailed() */
 void ChargePoint20::rpcClientFailed()
 {
+    m_rpc_connected = false;
     LOG_ERROR << "Connection failed with Central System";
     m_events_handler.connectionFailed();
 }
@@ -716,6 +777,12 @@ void ChargePoint20::rpcDisconnected()
     // Check if stop is in progress
     if (!m_stop_in_progress)
     {
+        if (!m_rpc_connected.exchange(false))
+        {
+            LOG_DEBUG << "Duplicate disconnection notification from Central System ignored";
+            return;
+        }
+
         LOG_ERROR << "Connection lost with Central System";
         m_events_handler.connectionStateChanged(false);
         if (m_status_manager)
@@ -944,6 +1011,7 @@ bool ChargePoint20::doConnect()
     if (m_rpc_client->isConnected())
     {
         // Close connection
+        m_rpc_connected = false;
         m_rpc_client->stop();
     }
 

@@ -146,8 +146,7 @@ bool TransactionManager20::startTransaction(unsigned int                        
     IdTokenInfoType token_info;
     std::string     error;
     std::string     message;
-    if (m_authent_manager.authorize(id_token, token_info, error, message) && (token_info.status == AuthorizationStatusEnumType::Accepted) &&
-        ((m_reservation_manager == nullptr) || m_reservation_manager->isTransactionAllowed(evse_id, id_token)))
+    if ((m_reservation_manager == nullptr) || m_reservation_manager->isTransactionAllowed(evse_id, id_token))
     {
         Transaction transaction;
         transaction.transaction_id = generateTransactionId();

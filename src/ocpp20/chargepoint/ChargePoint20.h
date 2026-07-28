@@ -144,6 +144,21 @@ class ChargePoint20
     /** @copydoc bool IChargePoint20::reconnect() */
     bool reconnect() override;
 
+    /** @copydoc bool IChargePoint20::dataTransfer(const std::string&, const std::string&, const std::string&, DataTransferStatusEnumType&, std::string&, std::string&, std::string&) */
+    bool dataTransfer(const std::string&                               vendor_id,
+                      const std::string&                               message_id,
+                      const std::string&                               request_data,
+                      ocpp::types::ocpp20::DataTransferStatusEnumType& status,
+                      std::string&                                     response_data,
+                      std::string&                                     error,
+                      std::string&                                     message) override;
+
+    /** @copydoc bool IChargePoint20::authorize(const ocpp::types::ocpp20::IdTokenType&, ocpp::types::ocpp20::IdTokenInfoType&, std::string&, std::string&) */
+    bool authorize(const ocpp::types::ocpp20::IdTokenType& id_token,
+                   ocpp::types::ocpp20::IdTokenInfoType&   token_info,
+                   std::string&                            error,
+                   std::string&                            message) override;
+
     /** @copydoc bool IChargePoint20::startTransaction(unsigned int,
      *                                                 unsigned int,
      *                                                 const ocpp::types::ocpp20::IdTokenType&,
@@ -342,6 +357,8 @@ class ChargePoint20
     std::atomic<bool> m_stop_in_progress;
     /** @brief Indicate that a reconnection process has been scheduled */
     std::atomic<bool> m_reconnect_scheduled;
+    /** @brief Current RPC connection state */
+    std::atomic<bool> m_rpc_connected;
 
     /** @brief Websocket s*/
     std::unique_ptr<ocpp::websockets::IWebsocketClient> m_ws_client;

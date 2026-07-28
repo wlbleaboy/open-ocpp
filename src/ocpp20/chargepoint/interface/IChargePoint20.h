@@ -175,6 +175,38 @@ class IChargePoint20
     virtual bool reconnect() = 0;
 
     /**
+     * @brief Send a DataTransfer request
+     * @param vendor_id Identifies the vendor specific implementation
+     * @param message_id Identifies the message
+     * @param request_data Data associated to the request
+     * @param status Response status
+     * @param response_data Data associated with the response
+     * @param error Error (Empty if not a CallError)
+     * @param message Error message (Empty if not a CallError)
+     * @return true if the data transfer has been done, false otherwise
+     */
+    virtual bool dataTransfer(const std::string&                               vendor_id,
+                              const std::string&                               message_id,
+                              const std::string&                               request_data,
+                              ocpp::types::ocpp20::DataTransferStatusEnumType& status,
+                              std::string&                                     response_data,
+                              std::string&                                     error,
+                              std::string&                                     message) = 0;
+
+    /**
+     * @brief Ask for authorization of an operation
+     * @param id_token Id token used for authorization
+     * @param token_info Authorization result
+     * @param error Error (Empty if not a CallError)
+     * @param message Error message (Empty if not a CallError)
+     * @return true if the authorization request has been processed, false otherwise
+     */
+    virtual bool authorize(const ocpp::types::ocpp20::IdTokenType& id_token,
+                           ocpp::types::ocpp20::IdTokenInfoType&   token_info,
+                           std::string&                            error,
+                           std::string&                            message) = 0;
+
+    /**
      * @brief Start a transaction and send the corresponding TransactionEvent
      * @param evse_id EVSE identifier
      * @param connector_id Connector identifier

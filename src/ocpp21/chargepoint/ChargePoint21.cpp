@@ -151,6 +151,7 @@ ChargePoint21::ChargePoint21(const ocpp::config::IChargePointConfig21&          
       m_messages_validator(),
       m_stop_in_progress(false),
       m_reconnect_scheduled(false),
+      m_rpc_connected(false),
       m_ws_client(),
       m_rpc_client(),
       m_msg_dispatcher(),
@@ -522,6 +523,7 @@ bool ChargePoint21::stop()
     {
         LOG_INFO << "Stopping OCPP stack";
         m_stop_in_progress = true;
+        m_rpc_connected = false;
         ret = m_rpc_client->stop();
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
@@ -571,6 +573,21 @@ bool ChargePoint21::reconnect()
     return ret;
 }
 
+bool ChargePoint21::authorize(const IdTokenType& id_token, IdTokenInfoType& token_info, std::string& error, std::string& message)
+{
+    bool ret = false;
+    if (m_authent_manager)
+    {
+        ret = m_authent_manager->authorize(id_token, token_info, error, message);
+    }
+    else
+    {
+        error = "NotSupported";
+        message = "Authent manager is not available";
+    }
+    return ret;
+}
+
 bool ChargePoint21::call(const VatNumberValidationReq& request,
                          VatNumberValidationConf&      response,
                          std::string&     error,
@@ -581,6 +598,12 @@ bool ChargePoint21::call(const VatNumberValidationReq& request,
 
 void ChargePoint21::rpcClientConnected()
 {
+    if (m_rpc_connected.exchange(true))
+    {
+        LOG_DEBUG << "Duplicate connection notification from Central System ignored";
+        return;
+    }
+
     LOG_INFO << "Connected to Central System";
     m_events_handler.connectionStateChanged(true);
     if (m_status_manager)
@@ -595,6 +618,7 @@ void ChargePoint21::rpcClientConnected()
 
 void ChargePoint21::rpcClientFailed()
 {
+    m_rpc_connected = false;
     LOG_ERROR << "Connection failed with Central System";
     m_events_handler.connectionFailed();
 }
@@ -603,6 +627,12 @@ void ChargePoint21::rpcDisconnected()
 {
     if (!m_stop_in_progress)
     {
+        if (!m_rpc_connected.exchange(false))
+        {
+            LOG_DEBUG << "Duplicate disconnection notification from Central System ignored";
+            return;
+        }
+
         LOG_ERROR << "Connection lost with Central System";
         m_events_handler.connectionStateChanged(false);
         if (m_status_manager)
@@ -663,6 +693,7 @@ bool ChargePoint21::doConnect()
     {
         if (m_rpc_client->isConnected())
         {
+            m_rpc_connected = false;
             m_rpc_client->stop();
         }
 

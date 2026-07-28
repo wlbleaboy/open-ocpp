@@ -216,6 +216,19 @@ class IChargePoint21
     virtual bool reconnect() = 0;
 
     /**
+     * @brief Ask for authorization of an operation
+     * @param id_token Id token used for authorization
+     * @param token_info Authorization result
+     * @param error Error (Empty if not a CallError)
+     * @param message Error message (Empty if not a CallError)
+     * @return true if the authorization request has been processed, false otherwise
+     */
+    virtual bool authorize(const ocpp::types::ocpp21::IdTokenType& id_token,
+                           ocpp::types::ocpp21::IdTokenInfoType&   token_info,
+                           std::string&                            error,
+                           std::string&                            message) = 0;
+
+    /**
      * @brief Start a transaction and send the corresponding TransactionEvent
      * @param evse_id EVSE identifier
      * @param connector_id Connector identifier

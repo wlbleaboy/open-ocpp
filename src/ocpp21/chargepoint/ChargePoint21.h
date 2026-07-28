@@ -116,6 +116,10 @@ public ocpp::rpc::RpcClient::IListener
     bool start() override;
     bool stop() override;
     bool reconnect() override;
+    bool authorize(const ocpp::types::ocpp21::IdTokenType& id_token,
+                   ocpp::types::ocpp21::IdTokenInfoType&   token_info,
+                   std::string&                            error,
+                   std::string&                            message) override;
 
     bool startTransaction(unsigned int                                evse_id,
                           unsigned int                                connector_id,
@@ -207,6 +211,7 @@ public ocpp::rpc::RpcClient::IListener
     ocpp::messages::ocpp21::MessagesValidator21 m_messages_validator;
     std::atomic_bool m_stop_in_progress;
     std::atomic_bool m_reconnect_scheduled;
+    std::atomic_bool m_rpc_connected;
     std::unique_ptr<ocpp::websockets::IWebsocketClient> m_ws_client;
     std::unique_ptr<ocpp::rpc::RpcClient> m_rpc_client;
     std::unique_ptr<ocpp::messages::MessageDispatcher> m_msg_dispatcher;
